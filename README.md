@@ -46,21 +46,17 @@ Users choose one of 20 medical specialties for example Cardiology, Oncology, Neu
 | — | 11 | Jury Day | 6 May |
 
 ## Repository Structure
- /frontend    → Web UI
- /backend     → API & ML engine
- /ml          → Model training scripts
- /docs        → Architecture diagram, wireframes, reports
+/frontend   → Web UI
+/backend    → API & ML engine
+/ml         → Model training scripts
+/docs       → Architecture diagram, wireframes, reports
 
- Branch Naming Convention
+## Branch Naming Convention
 
-feature/sprint-[short-description]  → new feature
-bugfix/sprint- [short-description]   → bug fix
-hotfix/sprint- [short-description]   → urgent fix
-
-Examples:
--feature/sprint1-architecture-diagram
--feature/sprint1-figma-wireframes
--feature/sprint2-csv-upload
--bugfix/login-error
+| Type | Format | Example |
+|------|--------|---------|
+| New feature | `feature/sprint[N]-[short-description]` | `feature/sprint1-architecture-diagram` |
+| Bug fix | `bugfix/[short-description]` | `bugfix/login-error` |
+| Urgent fix | `hotfix/[short-description]` | `hotfix/csv-crash` |
 
 *Prepared for SENG 430 · February 2025*
