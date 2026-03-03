@@ -63,6 +63,19 @@
 
 ---
 
+## Project Management Toolchain
+
+| Tool | Category | Purpose |
+|------|----------|---------|
+| Jira | Project Management | Product backlog, sprint backlog, user stories, story points, velocity tracking, burndown charts |
+| GitHub | Version Control | All source code, feature branches, pull requests, code review |
+| GitHub Wiki | Documentation | Architecture decisions, meeting notes, retrospective boards, API docs, sprint notes |
+| Figma | UI/UX Design | Wireframes and high-fidelity mockups for all 7 steps; clickable prototype |
+| Miro | Retrospectives | Sprint retrospective boards — Keep / Improve / Try format |
+| Google Forms / Maze | User Testing | Usability testing with non-CS participants (Weeks 9–10) |
+
+---
+
 ## Privacy & Security
 
 - All communication over HTTPS
