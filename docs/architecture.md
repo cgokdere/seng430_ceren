@@ -1,72 +1,67 @@
-# Architecture Decisions
-*Lead Developer: Ceren Gökdere — Sprint 1*
-*Developer: Elif İstanbulluoğlu — Sprint 1*
+## Architecture
+
+This repository contains a lightweight, educational web application that guides users through a **7-step ML learning pipeline** across multiple clinical specialties. The system is intentionally simple: a **static frontend** orchestrates the workflow and calls a **Python FastAPI backend** for data preparation operations.
+
+---
+
+## High-level goals
+
+- Provide a **step-by-step** learning experience (clinical context → data exploration → preparation → modeling → results → explainability → ethics).
+- Keep setup friction low: **no build tools**, no database, no authentication.
+- Perform only the compute-heavy / library-heavy steps (imputation, scaling, SMOTE, splitting) in a backend API.
+
+---
 
 ## Tech Stack
 | Layer | Technology | Reason |
 |-------|------------|--------|
-| Frontend | React 18 + Vite | Required toolchain; fast HMR, component-based UI suits 7-step pipeline |
+| Frontend | HTML/CSS/JS | Required toolchain; fast HMR, component-based UI suits 7-step pipeline |
 | Backend | FastAPI (Python) | Required toolchain; auto-generates /docs endpoint, async support, easy scikit-learn integration |
 | ML Engine | scikit-learn | Required toolchain; all 6 required models available out of the box |
 | Storage | Browser Session Storage | No database needed; state clears on tab close, zero backend storage cost |
 
+## System overview
+
+### Components
+
+- **Frontend (static HTML/CSS/JS)**: `frontend/`
+  - Multi-page flow using `step*.html` pages.
+  - Loads bundled datasets (CSV) from `frontend/datasets2/`.
+  - Collects user choices (target column, feature roles, preprocessing settings).
+  - Calls backend API and renders “before/after” summaries.
+
+- **Backend (FastAPI)**: `backend/`
+  - Exposes a JSON API for data preparation.
+  - Uses Pandas + NumPy + scikit-learn + imbalanced-learn.
+  - Returns processed **train/test rows** and summary statistics to drive UI charts/panels.
+
+- **Docs**: `docs/`
+  - Run instructions 
+  - Architecture stack 
+  - Definition of Done
+  - Backlog Prioritization
 ---
 
-## API Endpoints (Planned)
+##  API Endpoints Reference
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/preprocess` | Clean and split uploaded CSV |
-| POST | `/api/train` | Train selected model with given parameters |
-| POST | `/api/predict` | Run prediction on test set |
-| GET | `/api/explain` | Return feature importance / SHAP values |
-| GET | `/api/bias-check` | Subgroup fairness metrics |
-| GET | `/api/metrics` | Return model evaluation metrics |
-| GET | `/api/certificate` | Generate PDF summary certificate |
-| POST | `/api/schema/validate` | Validate uploaded CSV schema |
-
+| `POST` | `/api/preprocess` | Clean and split uploaded CSV |
+| `POST` | `/api/train` | Train selected model with given parameters |
+| `POST` | `/api/predict` | Run prediction on test set |
+| `GET` | `/api/explain` | Feature importance / SHAP values |
+| `GET` | `/api/bias-check` | Subgroup fairness metrics |
+| `GET` | `/api/metrics` | Model evaluation metrics |
+| `GET` | `/api/certificate` | Generate PDF summary certificate |
+| `GET` | `/api/docs` | Auto-generated FastAPI documentation |
+| `POST` | `/api/schema/validate` | Validate data schema |
+| `POST` | `/api/model/train` | Train model with params |
+| `POST` | `/api/model/metrics` | Compute confusion matrix |
 ---
 
-## System Layers
-
-### Frontend (React 18 + Vite)
-- 7-step guided pipeline UI
-- Domain pill bar with 20 clinical specialties
-- Sliders, charts, confusion matrix, ROC curve
-- All state stored in Browser Session Storage
-
-### Backend (FastAPI)
-- REST API serving frontend requests
-- Handles preprocessing, training, prediction
-- Auto-generated API docs at `/docs` endpoint
-- Communicates with ML layer via in-process Python function calls
-- Data validation and PII filtering handled server-side
-
-### ML Engine (scikit-learn)
-- 6 model implementations:
-  - K-Nearest Neighbors (KNN)
-  - Support Vector Machine (SVM)
-  - Decision Tree
-  - Random Forest
-  - Logistic Regression
-  - Naive Bayes
-
----
-
-## CI / QA
-
-| Tool | Purpose |
-|------|---------|
-| GitHub Actions | CI pipeline — runs on every PR to `main` |
-| ESLint / Prettier | Code style and linting |
-| Lighthouse | Performance score target ≥ 80 |
-| axe | Accessibility scan; contrast ratio ≥ 4.5:1, keyboard navigation |
-
----
-
-## Project Management Toolchain
+## Project management toolchain
 
 | Tool | Category | Purpose |
-|------|----------|---------|
+|---|---|---|
 | Jira | Project Management | Product backlog, sprint backlog, user stories, story points, velocity tracking, burndown charts |
 | GitHub | Version Control | All source code, feature branches, pull requests, code review |
 | GitHub Wiki | Documentation | Architecture decisions, meeting notes, retrospective boards, API docs, sprint notes |
@@ -86,13 +81,13 @@
 
 ---
 
-## Branch Strategy
+## Branch strategy
 
 | Branch | Purpose |
-|--------|---------|
+|---|---|
 | `main` | Production-ready, protected |
 | `feature/sprint[N]-[desc]` | Feature development |
 | `bugfix/[desc]` | Bug fixes |
 | `hotfix/[desc]` | Urgent fixes |
 
-*All merges to `main` require 1 PR approval from Lead Developer.*
+- All merges to `main` require **1 PR approval** from the Lead Developer.
