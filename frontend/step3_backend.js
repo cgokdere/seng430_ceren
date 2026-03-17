@@ -34,10 +34,26 @@ function initStep3UI() {
         }
     };
 
+    const onSettingChanged = () => {
+        window.step3Complete = false;
+        const banner = document.getElementById('step3ReadyBanner');
+        if (banner) banner.style.display = 'none';
+        resetTransformStatsPlaceholder();
+    };
+
     if (slider) {
-        slider.addEventListener('input', updateHint);
+        slider.addEventListener('input', () => {
+            updateHint();
+            onSettingChanged();
+        });
         updateHint(); // Run once
     }
+
+    // Add to dropdowns
+    ['missingSelect', 'normSelect', 'smoteSelect'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', onSettingChanged);
+    });
 
     // Dynamic warning texts: Target class balance and missing pct hints
     updateHintsWarning(ds);
