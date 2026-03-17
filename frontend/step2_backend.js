@@ -17,58 +17,58 @@ const DEFAULT_DATASET = getDatasetForDomain(getCurrentDomain());
 
 // ── SESSION STORAGE KEYS ─────────────────────────────────────────
 const SS = {
-  DATASET:       'healthai_dataset',       // parsed dataset object
-  SCHEMA_OK:     'healthai_schemaOK',      // '1' when mapper confirmed
-  COLUMN_ROLES:  'healthai_columnRoles',   // {colName: role} map
-  TARGET_COL:    'healthai_targetCol',     // selected target column name
-  DATA_SOURCE:   'healthai_dataSource',    // 'default' | 'upload'
+  DATASET: 'healthai_dataset',       // parsed dataset object
+  SCHEMA_OK: 'healthai_schemaOK',      // '1' when mapper confirmed
+  COLUMN_ROLES: 'healthai_columnRoles',   // {colName: role} map
+  TARGET_COL: 'healthai_targetCol',     // selected target column name
+  DATA_SOURCE: 'healthai_dataSource',    // 'default' | 'upload'
 };
 
 // ── SAVE / LOAD SESSION ──────────────────────────────────────────
 function saveDataset(ds) {
-  try { sessionStorage.setItem(SS.DATASET, JSON.stringify(ds)); } catch(e) { console.warn('sessionStorage full', e); }
+  try { sessionStorage.setItem(SS.DATASET, JSON.stringify(ds)); } catch (e) { console.warn('sessionStorage full', e); }
 }
 function loadDataset() {
-  try { const v = sessionStorage.getItem(SS.DATASET); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+  try { const v = sessionStorage.getItem(SS.DATASET); return v ? JSON.parse(v) : null; } catch (e) { return null; }
 }
 function saveSchemaOK(ok) {
   try {
     if (ok) { sessionStorage.setItem(SS.SCHEMA_OK, '1'); localStorage.setItem('heathAI_schemaOK', '1'); }
-    else    { sessionStorage.removeItem(SS.SCHEMA_OK); localStorage.removeItem('heathAI_schemaOK'); }
-  } catch(e) {}
+    else { sessionStorage.removeItem(SS.SCHEMA_OK); localStorage.removeItem('heathAI_schemaOK'); }
+  } catch (e) { }
 }
 function isSchemaOK() {
-  try { return sessionStorage.getItem(SS.SCHEMA_OK) === '1'; } catch(e) { return false; }
+  try { return sessionStorage.getItem(SS.SCHEMA_OK) === '1'; } catch (e) { return false; }
 }
 function saveColumnRoles(roles) {
-  try { sessionStorage.setItem(SS.COLUMN_ROLES, JSON.stringify(roles)); } catch(e) {}
+  try { sessionStorage.setItem(SS.COLUMN_ROLES, JSON.stringify(roles)); } catch (e) { }
 }
 function loadColumnRoles() {
-  try { const v = sessionStorage.getItem(SS.COLUMN_ROLES); return v ? JSON.parse(v) : {}; } catch(e) { return {}; }
+  try { const v = sessionStorage.getItem(SS.COLUMN_ROLES); return v ? JSON.parse(v) : {}; } catch (e) { return {}; }
 }
 function saveTargetCol(col) {
-  try { sessionStorage.setItem(SS.TARGET_COL, col); } catch(e) {}
+  try { sessionStorage.setItem(SS.TARGET_COL, col); } catch (e) { }
 }
 function loadTargetCol() {
-  try { return sessionStorage.getItem(SS.TARGET_COL) || ''; } catch(e) { return ''; }
+  try { return sessionStorage.getItem(SS.TARGET_COL) || ''; } catch (e) { return ''; }
 }
 
 // ── IDENTIFIER & TARGET HEURISTICS ───────────────────────────────
 function _looksLikeId(name) {
   const n = name.toLowerCase().replace(/[_\s\-]/g, '');
-  const exact = ['id','pid','uid','sid','cid','rid','eid','mrn','ssn','nhs','accession'];
+  const exact = ['id', 'pid', 'uid', 'sid', 'cid', 'rid', 'eid', 'mrn', 'ssn', 'nhs', 'accession'];
   return exact.includes(n) || n.endsWith('id');
 }
 
 function _looksLikeTarget(name) {
   const n = name.toLowerCase().replace(/[_\s\-]/g, '');
   const keywords = [
-    'death','died','mortality','survive','survival',
-    'readmit','admission','rehospital',
-    'outcome','result','label','target','class','status','condition',
-    'disease','disorder','diagnosis','diagnosed',
-    'event','failure','stroke','attack','cancer','tumor','positive',
-    'heartdisease','heartfailure','chd','mi','cvd',
+    'death', 'died', 'mortality', 'survive', 'survival',
+    'readmit', 'admission', 'rehospital',
+    'outcome', 'result', 'label', 'target', 'class', 'status', 'condition',
+    'disease', 'disorder', 'diagnosis', 'diagnosed',
+    'event', 'failure', 'stroke', 'attack', 'cancer', 'tumor', 'positive',
+    'heartdisease', 'heartfailure', 'chd', 'mi', 'cvd',
   ];
   return keywords.some(k => n.includes(k));
 }
@@ -110,17 +110,17 @@ function analyseCSV(parsedData) {
 
     // Type classification
     let type;
-    if (isIdentifier)                   type = 'identifier';
+    if (isIdentifier) type = 'identifier';
     else if (uniqueValues.length === 2) type = 'binary';    // 0/1, Yes/No, Male/Female …
-    else if (isNumeric)                 type = 'numeric';
+    else if (isNumeric) type = 'numeric';
     else if (uniqueValues.length <= 20) type = 'category';  // manageable text cardinality
-    else                                type = 'text';      // high-cardinality free text
+    else type = 'text';      // high-cardinality free text
 
     // Role suggestion
     let role;
-    if (isIdentifier)              role = 'ignore';
+    if (isIdentifier) role = 'ignore';
     else if (_looksLikeTarget(name)) role = 'target';
-    else                           role = 'feature';
+    else role = 'feature';
 
     // Stats
     let stats = {};
@@ -209,9 +209,9 @@ function renderDataset(ds) {
   const kpiMissing = document.getElementById('kpiMissing');
   const kpiMissingWrap = document.getElementById('kpiMissingWrap');
 
-  if (kpiPatients)     kpiPatients.textContent = ds.rows.toLocaleString();
+  if (kpiPatients) kpiPatients.textContent = ds.rows.toLocaleString();
   if (kpiMeasurements) kpiMeasurements.textContent = ds.columns.filter(c => c.role !== 'ignore' && c.name !== ds.targetColumn).length;
-  if (kpiMissing)      kpiMissing.textContent = ds.totalMissingPct + '%';
+  if (kpiMissing) kpiMissing.textContent = ds.totalMissingPct + '%';
   if (kpiMissingWrap) {
     kpiMissingWrap.className = 'kpi' + (ds.totalMissingPct > 10 ? ' warn' : ds.totalMissingPct > 0 ? '' : ' good');
   }
@@ -339,10 +339,10 @@ function renderTargetSelector(ds) {
   sel.parentNode.replaceChild(newSel, sel);
 
   // Save choice
-  newSel.addEventListener('change', () => { 
-    saveTargetCol(newSel.value); 
+  newSel.addEventListener('change', () => {
+    saveTargetCol(newSel.value);
     ds.targetColumn = newSel.value;
-    
+
     // Sync roles to avoid duplicate targets
     const roles = loadColumnRoles();
     Object.keys(roles).forEach(k => {
@@ -393,7 +393,7 @@ function populateMapper(ds) {
   if (previewHead) {
     if (ds.rawRows && ds.rawRows.length > 0) {
       const n = Math.min(5, ds.rawRows.length);
-      previewHead.innerHTML = '<tr><th>Column</th>' + Array.from({length:n},(_,i)=>`<th>Row ${i+1}</th>`).join('') + '</tr>';
+      previewHead.innerHTML = '<tr><th>Column</th>' + Array.from({ length: n }, (_, i) => `<th>Row ${i + 1}</th>`).join('') + '</tr>';
     } else {
       previewHead.innerHTML = '<tr><th>Column</th><th>Sample Value</th></tr>';
     }
@@ -401,10 +401,10 @@ function populateMapper(ds) {
 
   const roleOptions = (currentRole, colName, isTarget) => {
     const roles = [
-      { value: 'target',   label: 'Target (what we predict)' },
-      { value: 'numeric',  label: 'Number (measurement)' },
+      { value: 'target', label: 'Target (what we predict)' },
+      { value: 'numeric', label: 'Number (measurement)' },
       { value: 'category', label: 'Category' },
-      { value: 'ignore',   label: 'Ignore (not a measurement)' },
+      { value: 'ignore', label: 'Ignore (not a measurement)' },
     ];
     return roles.map(r =>
       `<option value="${r.value}" ${currentRole === r.value ? 'selected' : ''}>${r.label}</option>`
@@ -412,13 +412,13 @@ function populateMapper(ds) {
   };
 
   const typeTag = (col) => {
-    if (col.type === 'identifier')  return '<span class="tag bad">Identifier-like</span>';
-    if (col.type === 'binary'   && col.missingPct > 0) return `<span class="tag warn">Binary · ${col.missingPct}% missing</span>`;
-    if (col.type === 'numeric'  && col.missingPct > 0) return `<span class="tag warn">Number · ${col.missingPct}% missing</span>`;
+    if (col.type === 'identifier') return '<span class="tag bad">Identifier-like</span>';
+    if (col.type === 'binary' && col.missingPct > 0) return `<span class="tag warn">Binary · ${col.missingPct}% missing</span>`;
+    if (col.type === 'numeric' && col.missingPct > 0) return `<span class="tag warn">Number · ${col.missingPct}% missing</span>`;
     if (col.type === 'category' && col.missingPct > 0) return `<span class="tag warn">Category · ${col.missingPct}% missing</span>`;
-    if (col.type === 'binary')      return `<span class="tag good">Binary (${col.uniqueCount} values)</span>`;
-    if (col.type === 'numeric')     return '<span class="tag good">Number</span>';
-    if (col.type === 'category')    return `<span class="tag info">Category (${col.uniqueCount} values)</span>`;
+    if (col.type === 'binary') return `<span class="tag good">Binary (${col.uniqueCount} values)</span>`;
+    if (col.type === 'numeric') return '<span class="tag good">Number</span>';
+    if (col.type === 'category') return `<span class="tag info">Category (${col.uniqueCount} values)</span>`;
     return '<span class="tag info">Text</span>';
   };
 
@@ -478,7 +478,7 @@ function populateMapper(ds) {
     if (targetSel.nextElementSibling && targetSel.nextElementSibling.classList.contains('custom-select-wrapper')) {
       targetSel.nextElementSibling.remove();
     }
-    
+
     targetSel.innerHTML = ds.columns
       .map(c => {
         const hint = c.type === 'binary' ? ' (binary — recommended)' : c.type === 'numeric' ? ' (numeric)' : c.type === 'identifier' ? ' (identifier — not recommended)' : ' (text)';
@@ -486,8 +486,35 @@ function populateMapper(ds) {
       })
       .join('');
     // When user changes target in mapper, update the column roles table
-    targetSel.onchange = function() {
+    targetSel.onchange = function () {
       const newTarget = this.value;
+
+      const optText = this.options[this.selectedIndex] ? this.options[this.selectedIndex].text : '';
+      const isNotRecommended = optText.toLowerCase().includes('not recommended');
+
+      // Update validation UI if target changes to force user to re-validate
+      const dot = document.getElementById('schDot');
+      const status = document.getElementById('schStatus');
+      const mb = document.getElementById('mapBanner');
+      const valBtn = document.getElementById('validateSchema');
+
+      if (dot) dot.className = 's-pill-dot warn';
+      if (status) status.textContent = 'Pending';
+      if (mb) {
+        if (isNotRecommended) {
+          mb.className = 'banner bad';
+          mb.innerHTML = '<div class="banner-icon">🚫</div><div><b>Error:</b> Selected target is not recommended. You cannot validate this schema.</div>';
+          if (valBtn) valBtn.disabled = true;
+        } else {
+          mb.className = 'banner warn';
+          mb.innerHTML = '<div class="banner-icon">⚠️</div><div><b>Target variable changed:</b> Please click "Validate Schema" to confirm this new target.</div>';
+          if (valBtn) valBtn.disabled = false;
+        }
+      } else {
+        if (valBtn) valBtn.disabled = isNotRecommended;
+      }
+      window.__healthai_mapperValidateClicked = false;
+
       // Update role selects in the mapper table
       document.querySelectorAll('#mapperTableBody select[data-col]').forEach(sel => {
         const currentVal = sel.value;
@@ -503,7 +530,7 @@ function populateMapper(ds) {
           onMapperRoleChange(sel);
           changed = true;
         }
-        
+
         if (changed && sel.nextElementSibling && sel.nextElementSibling.classList.contains('custom-select-wrapper')) {
           const wrapper = sel.nextElementSibling;
           const textSpan = wrapper.querySelector('.custom-select-text');
@@ -532,14 +559,14 @@ function onMapperRoleChange(sel) {
   // If the user selects "target", we need to demote any existing target
   if (newRole === 'target' && ds) {
     ds.targetColumn = colName;
-    
+
     // 1. Demote in savedRoles
     Object.keys(roles).forEach(k => {
       if (roles[k] === 'target' && k !== colName) {
         const cInfo = ds.columns.find(c => c.name === k);
         const naturalRole = (cInfo && (cInfo.type === 'binary' || cInfo.type === 'category' || cInfo.type === 'text')) ? 'category' : 'numeric';
         roles[k] = naturalRole;
-        
+
         // 2. Update the UI for the demoted column
         const otherSel = document.querySelector(`#mapperTableBody select[data-col="${k}"]`);
         if (otherSel) {
@@ -575,6 +602,7 @@ function onMapperRoleChange(sel) {
           else opt.classList.remove('selected');
         });
       }
+      mainTargetSel.dispatchEvent(new Event('change'));
     }
   }
 
@@ -630,7 +658,7 @@ function validateMapper() {
   const ignoreCols = Object.entries(activeRoles).filter(([, r]) => r === 'ignore');
 
   if (targetCols.length === 0) return { ok: false, msg: 'No target column assigned. Set one column as "Target".' };
-  if (targetCols.length > 1)  return { ok: false, msg: 'More than one target column assigned. Keep exactly one.' };
+  if (targetCols.length > 1) return { ok: false, msg: 'More than one target column assigned. Keep exactly one.' };
   if (featureCols.length === 0) return { ok: false, msg: 'No feature columns assigned. At least one "Number" or "Category" column is required.' };
 
   const targetName = targetCols[0][0];
@@ -734,14 +762,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     saveSchemaOK(true);
     updateSchemaBanner();
-    
+
     // Update target column and refresh all UI
     const ds = loadDataset();
     if (ds && result.targetName) {
       // Update column roles to match validated target
       ds.columns.forEach(c => {
         if (c.name === result.targetName) c.role = 'target';
-        else if (c.role === 'target')     c.role = 'feature';
+        else if (c.role === 'target') c.role = 'feature';
       });
       ds.targetColumn = result.targetName;
       // Recompute class balance for the new target
@@ -756,13 +784,13 @@ document.addEventListener('DOMContentLoaded', function () {
       _syncTargetSelUI(ds.targetColumn);
       renderTargetSelector(ds);
     }
-    
+
     // Dispatch event so app.js schemaOK variable syncs
-    try { window.dispatchEvent(new CustomEvent('schemaValidated', { detail: { ok: true } })); } catch(e) {}
-    
+    try { window.dispatchEvent(new CustomEvent('schemaValidated', { detail: { ok: true } })); } catch (e) { }
+
     // Emulate app.js markSchemaSaved logic
-    try { localStorage.setItem('heathAI_schemaOK', '1'); } catch(e) {}
-    try { sessionStorage.setItem('healthai_schemaOK', '1'); } catch(e) {}
+    try { localStorage.setItem('heathAI_schemaOK', '1'); } catch (e) { }
+    try { sessionStorage.setItem('healthai_schemaOK', '1'); } catch (e) { }
     const sb = document.getElementById('schemaBanner');
     if (sb) {
       sb.className = 'banner good';
@@ -780,12 +808,12 @@ document.addEventListener('DOMContentLoaded', function () {
   if (_origSaveMapping) {
     const freshBtn = _origSaveMapping.cloneNode(true);
     _origSaveMapping.parentNode.replaceChild(freshBtn, _origSaveMapping);
-    freshBtn.addEventListener('click', function() { _doSave(false); });
+    freshBtn.addEventListener('click', function () { _doSave(false); });
   }
   if (_origSaveAndClose) {
     const freshBtn = _origSaveAndClose.cloneNode(true);
     _origSaveAndClose.parentNode.replaceChild(freshBtn, _origSaveAndClose);
-    freshBtn.addEventListener('click', function() { _doSave(true); });
+    freshBtn.addEventListener('click', function () { _doSave(true); });
   }
 
 });
@@ -794,12 +822,12 @@ document.addEventListener('DOMContentLoaded', function () {
 function loadDefaultDataset(resetSchema) {
   const domainName = getCurrentDomain();
   const meta = getDatasetForDomain(domainName);
-  
+
   if (!meta || !meta.localFile) {
     console.warn("No localFile mapping for " + domainName);
     return;
   }
-  
+
   // Sync nav domain label and dropdown
   const domainLabelEl = document.getElementById('domainLabel');
   const domainSelectEl = document.getElementById('domainSelect');
@@ -819,7 +847,7 @@ function loadDefaultDataset(resetSchema) {
       Downloading and analyzing realistic dataset (${meta.localFile})...
     </td></tr>`;
   }
-  
+
   // Inject a quick CSS spin animation if not present
   if (!document.getElementById('spinStyle')) {
     const style = document.createElement('style');
@@ -834,20 +862,20 @@ function loadDefaultDataset(resetSchema) {
     header: true,
     skipEmptyLines: true,
     dynamicTyping: false, // Types handled in analyseCSV
-    complete: function(results) {
+    complete: function (results) {
       if (!results.data || results.data.length === 0) {
         console.error("Empty CSV or parse error", results.errors);
         if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="color:var(--bad); text-align:center;">Empty or invalid CSV file.</td></tr>';
         return;
       }
-      
+
       try {
         const ds = analyseCSV(results);
-        
+
         // Override properties with metadata from domain_datasets.js
         ds.name = meta.name || domainName;
         ds.source = meta.source || "Local CSV";
-        
+
         // Force target column if specified in metadata
         if (meta.defaultTarget) {
           const tCol = ds.columns.find(c => c.name === meta.defaultTarget);
@@ -865,7 +893,7 @@ function loadDefaultDataset(resetSchema) {
             ds.imbalanceRatio = ds.classBalance ? computeImbalanceRatio(ds.classBalance) : null;
           }
         }
-        
+
         saveDataset(ds);
         renderDataset(ds);
         if (resetSchema) {
@@ -878,7 +906,7 @@ function loadDefaultDataset(resetSchema) {
         if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="color:var(--bad); text-align:center;">Failed to analyze dataset. See console.</td></tr>';
       }
     },
-    error: function(err) {
+    error: function (err) {
       console.error("Failed to load local dataset CSV:", err);
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="color:var(--bad); text-align:center;">Failed to load dataset file: ' + err.message + '</td></tr>';
     }
@@ -888,13 +916,13 @@ function loadDefaultDataset(resetSchema) {
 // ── FILE HANDLER ─────────────────────────────────────────────────
 function handleFile(file) {
   const statusEl = document.getElementById('uploadStatus');
-  const errorEl  = document.getElementById('uploadError');
-  const msgEl    = document.getElementById('uploadMsg');
+  const errorEl = document.getElementById('uploadError');
+  const msgEl = document.getElementById('uploadMsg');
   const errMsgEl = document.getElementById('uploadErrMsg');
-  const dz       = document.getElementById('dropZone');
+  const dz = document.getElementById('dropZone');
 
   if (statusEl) statusEl.style.display = 'none';
-  if (errorEl)  errorEl.style.display  = 'none';
+  if (errorEl) errorEl.style.display = 'none';
   if (!file) return;
 
   // Validate extension
@@ -911,7 +939,7 @@ function handleFile(file) {
   dz?.classList.remove('error');
 
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = function (e) {
     try {
       if (typeof Papa === 'undefined') {
         showUploadError(errMsgEl, errorEl, dz, 'CSV parser not loaded. Please check your internet connection.');
@@ -937,7 +965,7 @@ function handleFile(file) {
       updateSchemaBanner();
       if (typeof initStep3UI === 'function') initStep3UI();
 
-    } catch(err) {
+    } catch (err) {
       showUploadError(errMsgEl, errorEl, dz, err.message || 'Could not parse the CSV file.');
     }
   };
@@ -946,9 +974,9 @@ function handleFile(file) {
 }
 
 function showUploadError(msgEl, errorEl, dz, msg) {
-  if (msgEl)   msgEl.textContent = msg;
+  if (msgEl) msgEl.textContent = msg;
   if (errorEl) errorEl.style.display = 'block';
-  if (dz)      dz.classList.add('error');
+  if (dz) dz.classList.add('error');
 }
 
 // ── SCHEMA BANNER ────────────────────────────────────────────────
@@ -986,7 +1014,7 @@ function showSchemaBanner(type, html) {
   const icons = {
     good: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--good);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`,
     warn: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>`,
-    bad:  `<span>🚫</span>`,
+    bad: `<span>🚫</span>`,
   };
   banner.className = `banner ${type}`;
   banner.innerHTML = `<div class="banner-icon">${icons[type] || ''}</div><div>${html}</div>`;
@@ -995,13 +1023,13 @@ function showSchemaBanner(type, html) {
 // ── HELPER: highlight source button ─────────────────────────────
 function highlightSourceBtn(which) {
   const defBtn = document.getElementById('useDefault');
-  const upBtn  = document.getElementById('useUpload');
+  const upBtn = document.getElementById('useUpload');
   if (!defBtn || !upBtn) return;
   if (which === 'default') {
     defBtn.style.borderColor = 'var(--primary)'; defBtn.style.color = 'var(--primary)';
-    upBtn.style.borderColor  = ''; upBtn.style.color = '';
+    upBtn.style.borderColor = ''; upBtn.style.color = '';
   } else {
-    upBtn.style.borderColor  = 'var(--primary)'; upBtn.style.color = 'var(--primary)';
+    upBtn.style.borderColor = 'var(--primary)'; upBtn.style.color = 'var(--primary)';
     defBtn.style.borderColor = ''; defBtn.style.color = '';
   }
 }
