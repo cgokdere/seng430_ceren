@@ -35,7 +35,7 @@ Users choose one of 20 medical specialties (e.g. Cardiology, Oncology, Neurology
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | HTML5, CSS3, Vanilla JavaScript |
+| Frontend | 	HTML/CSS/JS |
 | Backend | FastAPI (Python) |
 | ML Engine | scikit-learn |
 | Storage | Browser Session Storage |
