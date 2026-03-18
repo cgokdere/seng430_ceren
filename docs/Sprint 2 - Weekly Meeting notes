@@ -1,0 +1,161 @@
+Weekly Meeting Notes – Sprint 2
+
+Date: March 16, 2026
+
+👥 Participants & Roles
+
+Elif İstanbulluoğlu — Scrum Master / Developer
+
+Emre Tek — QA / Documentation Lead
+
+Kerim Efe Kocacık — UX Designer
+
+Ceren Gökdere — Lead Developer
+
+Göksu Bulut — Product Owner
+
+📝 Key Decisions
+🔹 Frontend Technology
+
+The team decided to proceed with HTML, CSS, and JavaScript for frontend development to ensure flexibility and simplicity.
+
+🔹 Git Workflow & Version Control
+
+Existing branch naming conventions and PR-based workflow will continue.
+
+All code integrations will follow the established GitHub workflow rules.
+
+🔹 Project Management & Collaboration
+
+Jira was actively used and continuously updated throughout the sprint.
+
+Miro board was used and updated to reflect system flow and design decisions.
+
+All implemented features were reviewed for alignment with defined User Stories.
+
+🚀 Development Progress
+🔹 Step 1 – Clinical Context & Questions
+
+Clinical context and clinical questions were updated for all 20 domains.
+
+Content now aligns with domain-specific requirements defined in the system scope.
+
+🔹 Step 2 – Dataset Management & Validation
+
+Default datasets defined in the domain coverage plan were successfully integrated into the system.
+
+Users can:
+
+Select a default dataset
+
+Upload their own .csv file
+
+File Upload Validation
+
+File upload is strictly validated based on required dataset structure.
+
+Invalid datasets are automatically rejected.
+
+Manual Testing
+
+File validation was tested with:
+
+5 valid datasets ✅
+
+5 invalid datasets ❌
+
+🔹 Target Variable Selection
+
+Users must select a target variable after dataset selection.
+
+Progression to Step 3 is blocked unless:
+
+Target variable is selected
+
+Validation is successfully completed
+
+Appropriate error messages are displayed for invalid or missing selections.
+
+This behavior was verified through manual testing.
+
+🔹 Dataset Insights (Post-Validation)
+
+After successful validation, the following are displayed:
+
+Class balance
+
+Measurement details
+
+Dataset summary
+
+🔹 Step 3 – Data Preprocessing
+
+Users cannot proceed to Step 4 before completing Step 3.
+
+System displays an error message if attempted prematurely.
+
+This constraint was validated through manual testing.
+
+Preprocessing Options
+
+Three dropdown menus were implemented:
+
+Missing Value Handling:
+
+Mean
+
+Median
+
+Remove
+
+Normalization:
+
+Z-score
+
+Min-Max
+
+None
+
+Class Imbalance Handling:
+
+SMOTE
+
+Class Weights
+
+None
+
+🔹 Data Processing & Visualization
+
+After clicking “Apply Settings”:
+
+Before & After Normalization charts are generated
+
+Class balance (Before & After SMOTE) charts are displayed
+
+All visualizations are fully functional.
+
+A green confirmation message is shown after successful processing.
+
+🧪 Testing & Validation
+
+Manual Test Plan was actively executed and validated:
+
+File upload validation
+
+Target variable validation
+
+Step transition constraints
+
+Data preprocessing behaviors
+
+All tested features behaved as expected.
+
+📋 Documentation & Reporting
+
+Documentation process continued systematically:
+
+GitHub repository used for version control and file management
+
+docs/ structure maintained
+
+Jira updated for all tasks and progress tracking
