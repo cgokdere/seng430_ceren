@@ -98,14 +98,17 @@ function analyseCSV(parsedData) {
     const numericValues = numericCells.map(v => Number(v)).filter(v => Number.isFinite(v));
     const isNumeric = nonEmpty.length > 0 && (numericCells.length / nonEmpty.length) > 0.9;
 
-    // Identifier = non-numeric text column where every value is unique.
-    // Numeric columns (age, score, frequency) are NEVER identifiers even if all unique.
-    // For small datasets (<30 rows) require the column name to look like an ID,
-    // because coincidental all-unique is common in small data.
+    // Identifier detection:
+    // - If the column NAME looks like an ID (ID, patient_id, MRN...), treat it as an identifier
+    //   when values are unique — even if the values are numeric (common in medical datasets).
+    // - Otherwise, keep the safety rule: numeric measurement columns are NOT identifiers,
+    //   because they can be coincidentally all-unique (especially in small datasets).
+    // - For small datasets (<30 rows), require the name to look like an ID to avoid false positives.
+    const looksLikeId = _looksLikeId(name);
     const isIdentifier = (
-      !isNumeric &&
       uniqueValues.length === rows.length &&
-      (rows.length >= 30 || _looksLikeId(name))
+      (rows.length >= 30 || looksLikeId) &&
+      (!isNumeric || looksLikeId)
     );
 
     // Type classification
