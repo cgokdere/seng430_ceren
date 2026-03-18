@@ -210,9 +210,24 @@ async function onApplyPreparation() {
         });
 
         // Advance to next step flag
-        step3Complete = true; // Flag for app.js if needed
+        window.step3Complete = true; // Gate in app.js checks window.step3Complete
         const reqReadyBanner = document.getElementById('step3ReadyBanner');
-        if (reqReadyBanner) reqReadyBanner.style.display = 'flex';
+        if (reqReadyBanner) {
+            // app.js can temporarily turn this same banner into an error banner.
+            // On success, restore it back to the "Ready" state.
+            reqReadyBanner.style.display = 'flex';
+            reqReadyBanner.className = 'banner good';
+            reqReadyBanner.innerHTML = `
+              <div class="banner-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--good);">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+              <div><b>Ready:</b> Data is clean, split, and balanced. Proceed to Step 4 to choose a model.</div>
+            `;
+        }
 
     } catch (e) {
         console.error(e);
