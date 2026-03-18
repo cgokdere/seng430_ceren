@@ -75,13 +75,13 @@ Then open your browser at:
 
 Right-click `frontend/step1-clinical-context.html` and select **"Open with Live Server"**.
 
-> Make sure the backend is running before using the app. The frontend communicates with the API at `http://localhost:8000`.
+> Make sure the backend is running before using the app. The frontend communicates with the API at `https://healthai-juniorengineers-1.onrender.com`.
 
 ---
 
 ## 4. API Endpoints Reference
 
-Once the backend is running, all endpoints are documented interactively at [`/api/docs`](http://localhost:8000/api/docs).
+Once the backend is running, all endpoints are documented interactively at [`/api/docs`](https://healthai-juniorengineers-1.onrender.com/api/docs).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -137,5 +137,5 @@ git push origin feature/sprint2-data-preprocessing
 ## 🆘 Need Help?
 
 - Browse open [Issues](https://github.com/cgokdere/HealthAi_juniorEngineers/issues) on GitHub
-- Check the interactive API docs at [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
+- Check the interactive API docs at [https://healthai-juniorengineers-1.onrender.com/api/docs](https://healthai-juniorengineers-1.onrender.com/api/docs)
 - Review architecture diagrams and sprint notes in the `/docs` folder

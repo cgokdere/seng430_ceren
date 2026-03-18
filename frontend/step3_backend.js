@@ -1,8 +1,8 @@
 // step3_backend.js
 // Handles Data Preparation (Handling Missing Values, Normalisation, Train/Test Split, SMOTE)
-// Communicates with FastAPI backend running on http://localhost:8000/api/prepare
+// Communicates with FastAPI backend running on /api/prepare
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = 'https://healthai-juniorengineers-1.onrender.com';
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Initialise dynamic texts (Slider values, record counts)

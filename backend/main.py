@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -11,9 +12,21 @@ from typing import List, Dict, Any
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
+def _load_allowed_origins() -> list[str]:
+    """
+    Comma-separated origins via FRONTEND_ORIGINS.
+    Example: "https://my-frontend.com,https://www.my-frontend.com"
+    """
+    raw = os.getenv("FRONTEND_ORIGINS", "").strip()
+    if raw:
+        return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    # Local dev defaults (python -m http.server 8080)
+    return ["http://localhost:8080", "http://127.0.0.1:8080"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # With allow_credentials=True, "*" is not valid. Provide explicit frontend origin(s).
+    allow_origins=_load_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
