@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os
 import pandas as pd
@@ -12,6 +13,14 @@ from typing import List, Dict, Any
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/api/docs")
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"ok": True}
+
 def _load_allowed_origins() -> list[str]:
     """
     Comma-separated origins via FRONTEND_ORIGINS.
@@ -21,7 +30,11 @@ def _load_allowed_origins() -> list[str]:
     if raw:
         return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
     # Local dev defaults (python -m http.server 8080)
-    return ["http://localhost:8080", "http://127.0.0.1:8080"]
+    return [
+        "https://healthai-juniorengineers-2.onrender.com",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
