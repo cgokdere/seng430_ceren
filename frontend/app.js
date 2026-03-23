@@ -54,6 +54,21 @@ function gate(n) {
     return true;
   }
 
+  // Step 4 to 5 lock
+  if (n >= 5) {
+    const emptyRow = document.getElementById('emptyCompareRow');
+    if (emptyRow && emptyRow.parentNode) {
+      showStep(4);
+      var step4Banner = document.getElementById('step4ReadyBanner');
+      if (step4Banner) {
+        step4Banner.style.display = 'flex';
+      } else {
+        alert("Action required: You must train at least one model in Step 4 before viewing the results in Step 5.");
+      }
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -773,57 +788,127 @@ window.addEventListener('resize', function () { clearTimeout(window._p8T); windo
 // ── AUTO-RETRAIN SIMULATION ───────────────────────────────────────
 let retrainTimer;
 function triggerRetrain() {
-  if (!document.getElementById('autoRetrain').checked) return;
+  if (!document.getElementById('autoRetrain')?.checked) return;
   clearTimeout(retrainTimer);
   const ts = document.getElementById('trainingStatus');
   const tm = document.getElementById('trainingMsg');
   const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
-  ts.style.display = 'block';
-  tm.textContent = `Retraining ${activeModel.toUpperCase()}…`;
+
+  if (ts && tm) {
+    ts.style.display = 'block';
+    tm.textContent = `Auto-retraining ${activeModel.toUpperCase()}...`;
+  }
+
   retrainTimer = setTimeout(() => {
-    ts.style.display = 'none';
-    document.querySelector(`.model-tab[data-model="${activeModel}"]`).classList.add('trained');
+    doRealTraining(activeModel);
   }, 900);
 }
 
-document.getElementById('trainBtn').addEventListener('click', () => {
+async function doRealTraining(activeModel) {
   const ts = document.getElementById('trainingStatus');
   const tm = document.getElementById('trainingMsg');
-  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
+
+  const step4Banner = document.getElementById('step4ReadyBanner');
+  if (step4Banner) step4Banner.style.display = 'none';
+
+  let params = {};
+  if (activeModel === 'knn') {
+    params.k = document.getElementById('knnK')?.value || 5;
+    params.dist = document.getElementById('knnDist')?.value || 'euclidean';
+  } else if (activeModel === 'svm') {
+    params.kernel = document.getElementById('svmKernel')?.value || 'rbf';
+    const v = +(document.getElementById('svmC')?.value || 5);
+    params.c = parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3));
+  } else if (activeModel === 'dt') {
+    params.depth = document.getElementById('dtDepth')?.value || 5;
+    params.criterion = "gini";
+  } else if (activeModel === 'rf') {
+    params.trees = document.getElementById('rfTrees')?.value || 100;
+    params.depth = document.getElementById('rfDepth')?.value || 10;
+  } else if (activeModel === 'lr') {
+    const v = +(document.getElementById('lrC')?.value || 5);
+    params.c = parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3));
+    params.iter = document.getElementById('lrIter')?.value || 1000;
+  }
+
+  let prepData;
+  try {
+    const d = sessionStorage.getItem('healthai_preprocessed');
+    prepData = d ? JSON.parse(d) : null;
+  } catch (e) { }
+
+  if (!prepData || !prepData.trainRows || prepData.trainRows.length === 0) {
+    alert("No preprocessed data found. Please complete Step 2 (Data Loading) and Step 3 (Preparation) first.");
+    return;
+  }
+
+  const payload = {
+    trainRows: prepData.trainRows,
+    testRows: prepData.testRows,
+    features: prepData.features,
+    targetColumn: prepData.target,
+    modelType: activeModel,
+    params: params
+  };
+
   ts.style.display = 'block';
-  tm.textContent = `Training ${activeModel.toUpperCase()} on 243 patients…`;
-  setTimeout(() => {
+  tm.textContent = `Training ${activeModel.toUpperCase()} on ${prepData.trainRows.length} patients…`;
+  const trainBtn = document.getElementById('trainBtn');
+  const compareBtn = document.getElementById('addCompare');
+  if (trainBtn) trainBtn.disabled = true;
+  if (compareBtn) compareBtn.disabled = true;
+
+  try {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const apiBase = isLocal ? 'http://127.0.0.1:8000' : 'https://healthai-juniorengineers-1.onrender.com';
+
+    const res = await fetch(apiBase + '/api/train', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'API Error');
+    }
+
+    const data = await res.json();
     ts.style.display = 'none';
-    document.querySelector(`.model-tab[data-model="${activeModel}"]`).classList.add('trained');
-    // Simulate result update
-    addCompareRow(activeModel);
-  }, 1200);
+
+    const tab = document.querySelector(`.model-tab[data-model="${activeModel}"]`);
+    if (tab) tab.classList.add('trained');
+
+    const tbody = document.getElementById('compareBody');
+    const emptyRow = document.getElementById('emptyCompareRow');
+    if (emptyRow) emptyRow.remove();
+
+    const tr = document.createElement('tr');
+    const sensMatches = data.sensitivity.match(/\d+/);
+    const sensVal = sensMatches ? parseInt(sensMatches[0], 10) : 0;
+    const sensCls = sensVal >= 70 ? 'good' : sensVal >= 60 ? 'warn' : 'bad';
+    tr.innerHTML = `<td>${data.model_name_display}</td><td>${data.accuracy}</td><td class="delta ${sensCls}">${data.sensitivity}</td><td>${data.specificity}</td><td>${data.auc}</td>`;
+    tbody.appendChild(tr);
+
+  } catch (e) {
+    console.error(e);
+    alert("Failed to train model. Is the Python backend running?\n\n" + e.message);
+    ts.style.display = 'none';
+  } finally {
+    if (trainBtn) trainBtn.disabled = false;
+    if (compareBtn) compareBtn.disabled = false;
+  }
+}
+
+document.getElementById('trainBtn').addEventListener('click', () => {
+  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
+  doRealTraining(activeModel);
 });
 
 document.getElementById('addCompare').addEventListener('click', () => {
   const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
-  addCompareRow(activeModel);
+  doRealTraining(activeModel);
 });
-
-const compareRows = { 'knn': true };
-function addCompareRow(model) {
-  if (compareRows[model]) return;
-  compareRows[model] = true;
-  const results = {
-    svm: ['SVM (RBF, C=1.0)', '81%', '71%', '87%', '0.79'],
-    dt: ['Decision Tree (depth=5)', '76%', '58%', '85%', '0.71'],
-    rf: ['Random Forest (100 trees)', '83%', '74%', '89%', '0.82'],
-    lr: ['Logistic Regression', '79%', '67%', '84%', '0.77'],
-    nb: ['Naïve Bayes', '74%', '60%', '81%', '0.72'],
-  };
-  const r = results[model];
-  if (!r) return;
-  const tbody = document.getElementById('compareBody');
-  const tr = document.createElement('tr');
-  const sensCls = parseFloat(r[2]) >= 70 ? 'good' : parseFloat(r[2]) >= 60 ? 'warn' : 'bad';
-  tr.innerHTML = `<td>${r[0]}</td><td>${r[1]}</td><td class="delta ${sensCls}">${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td>`;
-  tbody.appendChild(tr);
-}
 
 // ── ETHICS CHECKLIST ──────────────────────────────────────────────
 function toggleCheck(el) {
@@ -1116,6 +1201,11 @@ document.getElementById('openMapper')?.addEventListener('click', () => { setTime
       tab.classList.add('active');
       activeModel = tab.dataset.model;
 
+      const activeModelName = document.getElementById('activeModelName');
+      if (activeModelName) {
+        activeModelName.textContent = tab.textContent;
+      }
+
       PARAM_PANELS.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -1158,7 +1248,7 @@ document.getElementById('openMapper')?.addEventListener('click', () => { setTime
     const lbl = document.getElementById('knnKVizLabel');
     if (lbl) lbl.textContent = k;
   });
-  wire('svmC', 'svmCVal', v => (+v < 5 ? '0.' + (+v) : +v - 4));
+  wire('svmC', 'svmCVal', v => parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3)));
   document.getElementById('svmKernel')?.addEventListener('change', () => { if (activeModel === 'svm') drawSVM(); });
   wire('dtDepth', 'dtDepthVal');
   wire('rfTrees', 'rfTreesVal', null, t => {
@@ -1166,7 +1256,7 @@ document.getElementById('openMapper')?.addEventListener('click', () => { setTime
     if (tv) tv.textContent = t;
   });
   wire('rfDepth', 'rfDepthVal');
-  wire('lrC', 'lrCVal', v => (+v < 5 ? '0.' + (+v) : +v - 4));
+  wire('lrC', 'lrCVal', v => parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3)));
   wire('lrIter', 'lrIterVal');
 
   // Also update KNN label when knnK changes
