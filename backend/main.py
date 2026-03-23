@@ -9,7 +9,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, recall_score, roc_auc_score, confusion_matrix
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
@@ -57,6 +64,14 @@ class PrepareRequest(BaseModel):
     columns: List[Dict[str, Any]]
     targetColumn: str
     settings: PreparationSettings
+
+class TrainingRequest(BaseModel):
+    trainRows: List[Dict[str, Any]]
+    testRows: List[Dict[str, Any]]
+    features: List[str]
+    targetColumn: str
+    modelType: str
+    params: Dict[str, Any]
 
 def get_stats(df, col_name, col_type):
     if col_type == 'numeric' and col_name in df.columns:
@@ -311,6 +326,123 @@ async def prepare_data(req: PrepareRequest):
             }
         }
 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/train")
+async def train_model(req: TrainingRequest):
+    try:
+        df_train = pd.DataFrame(req.trainRows)
+        df_test = pd.DataFrame(req.testRows)
+        
+        if df_train.empty or df_test.empty:
+            raise HTTPException(status_code=400, detail="Training or testing data is empty")
+            
+        X_train = df_train[req.features]
+        y_train = df_train[req.targetColumn]
+        X_test = df_test[req.features]
+        y_test = df_test[req.targetColumn]
+        
+        # One-Hot Encode categorical (string) features
+        cat_cols = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
+        if cat_cols:
+            n_train = len(X_train)
+            X_combined = pd.concat([X_train, X_test], axis=0)
+            X_combined = pd.get_dummies(X_combined, columns=cat_cols, drop_first=True)
+            X_train = X_combined.iloc[:n_train].copy()
+            X_test = X_combined.iloc[n_train:].copy()
+        
+        m_type = req.modelType
+        p = req.params
+        model_name_display = m_type.upper()
+        model = None
+        
+        if m_type == "knn":
+            k = int(p.get("k", 5))
+            dist = "manhattan" if "manhattan" in str(p.get("dist", "")).lower() else "euclidean"
+            model = KNeighborsClassifier(n_neighbors=k, metric=dist)
+            model_name_display = f"KNN (K={k})"
+            
+        elif m_type == "svm":
+            kernel = p.get("kernel", "rbf")
+            c = float(p.get("c", 1.0))
+            model = SVC(kernel=kernel, C=c, probability=True, random_state=42)
+            model_name_display = f"SVM ({kernel.upper()}, C={c})"
+            
+        elif m_type == "dt":
+            depth = int(p.get("depth", 5))
+            criterion = "entropy" if "entropy" in str(p.get("criterion", "")).lower() else "gini"
+            model = DecisionTreeClassifier(max_depth=depth, criterion=criterion, random_state=42)
+            model_name_display = f"Decision Tree (depth={depth})"
+            
+        elif m_type == "rf":
+            trees = int(p.get("trees", 100))
+            depth = int(p.get("depth", 10))
+            model = RandomForestClassifier(n_estimators=trees, max_depth=depth, random_state=42)
+            model_name_display = f"Random Forest ({trees} trees)"
+            
+        elif m_type == "lr":
+            c = float(p.get("c", 1.0))
+            max_iter = int(p.get("iter", 1000))
+            model = LogisticRegression(C=c, max_iter=max_iter, random_state=42)
+            model_name_display = f"Logistic Regression (C={c})"
+            
+        elif m_type == "nb":
+            model = GaussianNB()
+            model_name_display = "Naïve Bayes"
+            
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown model type: {m_type}")
+            
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        labels = np.unique(y_test)
+        if len(labels) >= 2:
+            # Assume binary classification; pos_label is usually 1 or the second class
+            pos_label = labels[1]
+            if 1 in labels: pos_label = 1
+            if 'Yes' in labels: pos_label = 'Yes'
+            
+            acc = accuracy_score(y_test, y_pred)
+            sens = recall_score(y_test, y_pred, pos_label=pos_label, zero_division=0)
+            
+            cm = confusion_matrix(y_test, y_pred, labels=labels)
+            if cm.shape == (2, 2):
+                tn, fp, fn, tp = cm.ravel()
+                spec = tn / (tn + fp) if (tn + fp) > 0 else 0
+            else:
+                spec = 0
+                
+            auc_val = 0.0
+            if hasattr(model, "predict_proba"):
+                y_prob = model.predict_proba(X_test)
+                if pos_label in model.classes_:
+                    pos_idx = list(model.classes_).index(pos_label)
+                    import math
+                    try:
+                        auc_val = roc_auc_score(y_test, y_prob[:, pos_idx])
+                        if math.isnan(auc_val): auc_val = 0.0
+                    except:
+                        pass
+        else:
+            acc = accuracy_score(y_test, y_pred)
+            sens = 0.0
+            spec = 0.0
+            auc_val = 0.0
+            
+        return {
+            "ok": True,
+            "model_id": m_type,
+            "model_name_display": model_name_display,
+            "accuracy": f"{int(round(acc * 100))}%",
+            "sensitivity": f"{int(round(sens * 100))}%",
+            "specificity": f"{int(round(spec * 100))}%",
+            "auc": f"{round(auc_val, 2)}"
+        }
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
