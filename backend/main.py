@@ -16,7 +16,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import accuracy_score, recall_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import accuracy_score, recall_score, roc_auc_score, confusion_matrix, precision_score, f1_score, roc_curve
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
@@ -36,11 +36,15 @@ def _load_allowed_origins() -> list[str]:
     raw = os.getenv("FRONTEND_ORIGINS", "").strip()
     if raw:
         return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
-    # Local dev defaults (python -m http.server 8080)
+    # Local dev: http.server 8080, VS Code Live Server 5500, etc.
     return [
         "https://healthai-juniorengineers-2.onrender.com",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:5501",
+        "http://127.0.0.1:5501",
     ]
 
 app.add_middleware(
@@ -124,23 +128,56 @@ def safe_json_serialize(df: pd.DataFrame) -> pd.DataFrame:
     """
     return df.where(pd.notnull(df), other=None)
 
+def _norm_col_name(name: Any) -> str:
+    """CSV BOM / whitespace — frontend ile backend sütun adı uyumu."""
+    if name is None:
+        return ""
+    return str(name).lstrip("\ufeff").strip()
+
+def _resolve_target_column(requested: str, df_columns: List[str]) -> Optional[str]:
+    """İstenen hedef adını DataFrame sütunlarıyla eşleştirir (BOM + büyük/küçük harf)."""
+    req_n = _norm_col_name(requested)
+    if req_n in df_columns:
+        return req_n
+    low = {c.lower(): c for c in df_columns}
+    if req_n.lower() in low:
+        return low[req_n.lower()]
+    return None
+
 @app.post("/api/prepare")
 async def prepare_data(req: PrepareRequest):
     try:
         warnings: List[str] = []
         df = pd.DataFrame(req.rawRows)
+        # Sütun adlarını normalize et (Excel/CSV BOM, boşluk)
+        df = df.rename(columns={c: _norm_col_name(c) for c in df.columns})
         if df.empty:
             raise HTTPException(status_code=400, detail="Empty dataset provided")
-        if req.targetColumn not in df.columns:
+
+        target_col = _resolve_target_column(req.targetColumn, list(df.columns))
+        if not target_col:
             raise HTTPException(status_code=400, detail=f"Target column '{req.targetColumn}' not found in data")
 
-        feature_cols = [c['name'] for c in req.columns if c['role'] in ['numeric', 'category'] and c['name'] in df.columns]
-        num_cols = [c['name'] for c in req.columns if c['role'] == 'numeric' and c['name'] in df.columns]
-        cat_cols = [c['name'] for c in req.columns if c['role'] == 'category' and c['name'] in df.columns]
+        # Metadata sütun adlarını veriyle hizala
+        def _meta_name(c: Dict[str, Any]) -> str:
+            return _norm_col_name(c.get("name"))
+
+        feature_cols = [
+            _meta_name(c) for c in req.columns
+            if c.get("role") in ["numeric", "category"] and _meta_name(c) in df.columns
+        ]
+        num_cols = [
+            _meta_name(c) for c in req.columns
+            if c.get("role") == "numeric" and _meta_name(c) in df.columns
+        ]
+        cat_cols = [
+            _meta_name(c) for c in req.columns
+            if c.get("role") == "category" and _meta_name(c) in df.columns
+        ]
 
         # Before stats (tüm dataset üzerinden)
         before_stats = {
-            "class_balance": get_class_balance(df, req.targetColumn),
+            "class_balance": get_class_balance(df, target_col),
             "features": {}
         }
         for col in num_cols:
@@ -148,12 +185,12 @@ async def prepare_data(req: PrepareRequest):
         # Aggregate numeric stats across all numeric feature values (global)
         before_stats["numeric_aggregate"] = get_aggregate_numeric_stats(df, num_cols)
 
-        keep_cols = feature_cols + [req.targetColumn]
+        keep_cols = feature_cols + [target_col]
         df = df[keep_cols]
-        df = df.dropna(subset=[req.targetColumn])
+        df = df.dropna(subset=[target_col])
 
         X = df[feature_cols].copy()
-        y = df[req.targetColumn]
+        y = df[target_col]
 
         for col in num_cols:
             X[col] = pd.to_numeric(X[col], errors='coerce').astype(np.float64)
@@ -243,7 +280,7 @@ async def prepare_data(req: PrepareRequest):
 
         after_stats = {
             "class_balance_before_smote": get_class_balance(
-                pd.DataFrame({req.targetColumn: y_train}), req.targetColumn
+                pd.DataFrame({target_col: y_train}), target_col
             ),
             "features": {}
         }
@@ -297,16 +334,16 @@ async def prepare_data(req: PrepareRequest):
                 )
 
         after_stats["class_balance"] = get_class_balance(
-            pd.DataFrame({req.targetColumn: y_train}), req.targetColumn
+            pd.DataFrame({target_col: y_train}), target_col
         )
         after_stats["applied_smote"] = applied_smote
 
         train_df = X_train.copy()
         # FIX: y_train numpy array olabilir (.values yok), np.array() ile güvenle al
-        train_df[req.targetColumn] = np.array(y_train)
+        train_df[target_col] = np.array(y_train)
 
         test_df = X_test.copy()
-        test_df[req.targetColumn] = np.array(y_test)
+        test_df[target_col] = np.array(y_test)
 
         # FIX: "None" string yerine gerçek JSON null (None) kullan
         train_df = safe_json_serialize(train_df)
@@ -401,15 +438,20 @@ async def train_model(req: TrainingRequest):
         
         labels = np.unique(y_test)
         if len(labels) >= 2:
-            # Assume binary classification; pos_label is usually 1 or the second class
+            # Assume binary classification; intelligently select pos_label
             pos_label = labels[1]
-            if 1 in labels: pos_label = 1
-            if 'Yes' in labels: pos_label = 'Yes'
-            
+            for lbl in labels:
+                lbl_str = str(lbl).lower().strip()
+                if lbl_str in ['1', '1.0', 'yes', 'true', 'positive', 'malignant', 'pathological', 'abnormal']:
+                    pos_label = lbl
+                    break
             acc = accuracy_score(y_test, y_pred)
             sens = recall_score(y_test, y_pred, pos_label=pos_label, zero_division=0)
+            prec = precision_score(y_test, y_pred, pos_label=pos_label, zero_division=0)
+            f1 = f1_score(y_test, y_pred, pos_label=pos_label, zero_division=0)
             
             cm = confusion_matrix(y_test, y_pred, labels=labels)
+            tn = fp = fn = tp = 0
             if cm.shape == (2, 2):
                 tn, fp, fn, tp = cm.ravel()
                 spec = tn / (tn + fp) if (tn + fp) > 0 else 0
@@ -417,6 +459,7 @@ async def train_model(req: TrainingRequest):
                 spec = 0
                 
             auc_val = 0.0
+            roc_points = []
             if hasattr(model, "predict_proba"):
                 y_prob = model.predict_proba(X_test)
                 if pos_label in model.classes_:
@@ -425,6 +468,15 @@ async def train_model(req: TrainingRequest):
                     try:
                         auc_val = roc_auc_score(y_test, y_prob[:, pos_idx])
                         if math.isnan(auc_val): auc_val = 0.0
+                        
+                        # Generate ROC curve points
+                        fpr, tpr, _ = roc_curve(y_test, y_prob[:, pos_idx], pos_label=pos_label)
+                        # Sample max 100 points to avoid large payload if test set is huge
+                        if len(fpr) > 100:
+                            indices = np.linspace(0, len(fpr)-1, 100, dtype=int)
+                            fpr = fpr[indices]
+                            tpr = tpr[indices]
+                        roc_points = [{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)]
                     except:
                         pass
         else:
@@ -432,6 +484,8 @@ async def train_model(req: TrainingRequest):
             sens = 0.0
             spec = 0.0
             auc_val = 0.0
+            tn = fp = fn = tp = 0
+            roc_points = []
             
         return {
             "ok": True,
@@ -440,7 +494,14 @@ async def train_model(req: TrainingRequest):
             "accuracy": f"{int(round(acc * 100))}%",
             "sensitivity": f"{int(round(sens * 100))}%",
             "specificity": f"{int(round(spec * 100))}%",
-            "auc": f"{round(auc_val, 2)}"
+            "precision": f"{int(round(prec * 100))}%",
+            "f1_score": f"{int(round(f1 * 100))}%",
+            "auc": round(float(auc_val), 2),
+            "tn": int(tn),
+            "fp": int(fp),
+            "fn": int(fn),
+            "tp": int(tp),
+            "roc_points": roc_points
         }
         
     except Exception as e:
