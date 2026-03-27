@@ -611,6 +611,12 @@ function onMapperRoleChange(sel) {
 
   roles[colName] = newRole;
   saveColumnRoles(roles);
+
+  // Hedef sütun değişince sessionStorage'daki ds.targetColumn güncellensin (Step 3 /prepare ile uyum)
+  if (newRole === 'target' && ds) {
+    saveTargetCol(colName);
+    saveDataset(ds);
+  }
 }
 
 // ── MAPPER VALIDATION ────────────────────────────────────────────

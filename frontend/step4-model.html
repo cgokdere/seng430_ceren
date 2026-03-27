@@ -748,6 +748,10 @@
               </div>
               <div class="slider-hint">Same as a single Decision Tree. Controls how complex each voting 'doctor' is
                 allowed to get.</div>
+              <div class="banner warn" style="margin-top:12px;">
+                <div class="banner-icon">⏳</div>
+                <div><b>Auto-retrain disabled:</b> Please adjust both sliders as needed, then click <b>⚡ Train Model</b>.</div>
+              </div>
             </div>
 
             <div id="params-lr" style="display:none;">
@@ -769,6 +773,10 @@
                   <input type="range" min="100" max="2000" step="100" value="1000" id="lrIter" class="live-param" />
                   <div class="slider-val" id="lrIterVal">1000</div>
                 </div>
+              </div>
+              <div class="banner warn" style="margin-top:12px;">
+                <div class="banner-icon">⏳</div>
+                <div><b>Auto-retrain disabled:</b> Please adjust both sliders as needed, then click <b>⚡ Train Model</b>.</div>
               </div>
             </div>
 
@@ -792,8 +800,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn teal" id="trainBtn" style="flex:1;">⚡ Train Model</button>
-              <button class="btn" id="addCompare">+ Compare</button>
+              <button class="btn teal" id="trainBtn" style="width:100%;">⚡ Train Model</button>
             </div>
             <div id="trainingStatus" style="display:none;margin-top:10px;">
               <div class="banner info">
@@ -977,6 +984,31 @@
             </div>
           </div>
 
+          <div class="card" id="currentModelCard" style="margin-top:12px;">
+            <div class="card-title" style="color:var(--primary);">Current Model</div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Model &amp; Settings</th>
+                    <th>Accuracy</th>
+                    <th>Sensitivity ★</th>
+                    <th>Specificity</th>
+                    <th>AUC</th>
+                    <th style="width:40px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="currentModelBody">
+                  <tr id="emptyCurrentModelRow">
+                    <td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a model to view current results.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:12px;">Only the most recently trained model is shown here. Click "+ Compare" below to save it to the comparison list.</div>
+            <button class="btn" id="addCompare" style="width:100%;">+ Compare</button>
+          </div>
+
           <div class="card" id="compareCard" style="margin-top:12px;">
             <div class="card-title">Model Comparison</div>
             <div class="tbl-wrap">
@@ -988,11 +1020,12 @@
                     <th>Sensitivity ★</th>
                     <th>Specificity</th>
                     <th>AUC</th>
+                    <th style="width:40px;"></th>
                   </tr>
                 </thead>
                 <tbody id="compareBody">
                   <tr id="emptyCompareRow">
-                    <td colspan="5" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a
+                    <td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a
                       model to view comparison results.</td>
                   </tr>
                 </tbody>
@@ -1003,13 +1036,13 @@
           </div>
         </div>
 
-        <div class="banner bad" id="step4ReadyBanner" style="display: none; margin-top: 24px;">
-          <div class="banner-icon">🚫</div>
-          <div><b>Action required:</b> You must train at least one model in Step 4 before viewing the results in Step 5.
-          </div>
-        </div>
-
       </div>
+      
+      <div class="banner bad" id="step4ReadyBanner" style="display: none; margin-top: 24px; margin-bottom: 16px;">
+        <div class="banner-icon">🚫</div>
+        <div><b>Action required:</b> You must train at least one model in Step 4 before viewing the results in Step 5.</div>
+      </div>
+
       <div class="screen-footer">
         <small>Step 4 / 7 · Model &amp; Parameters</small>
         <div style="display:flex;gap:8px;">

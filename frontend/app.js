@@ -22,6 +22,43 @@ function showStep(n) {
   }
   if (n === 4 && typeof _redrawActive === 'function') {
     setTimeout(function () { requestAnimationFrame(_redrawActive); }, 80);
+    // Show all models when returning back to Step 4
+    const tbody = document.getElementById('compareBody');
+    if (tbody) {
+      Array.from(tbody.querySelectorAll('tr')).forEach(tr => tr.style.display = '');
+    }
+  }
+  if (n >= 5) {
+    // When moving to Step 5, only keep the highest accuracy version visible for each model type
+    const tbody = document.getElementById('compareBody');
+    if (tbody) {
+      const rows = Array.from(tbody.querySelectorAll('tr[data-model-id]'));
+      const best = {};
+      rows.forEach(r => {
+        const mid = r.dataset.modelId;
+        const acc = parseFloat(r.dataset.accuracy) || 0;
+        if (!best[mid] || best[mid].acc <= acc) {
+          best[mid] = { acc, row: r };
+        }
+      });
+      rows.forEach(r => {
+        const mid = r.dataset.modelId;
+        if (best[mid] && best[mid].row !== r) {
+          r.style.display = 'none'; // hide suboptimal variants
+        } else {
+          r.style.display = '';
+        }
+      });
+      
+      // Pass the visible rows to step5-backend.js if defined
+      if (typeof window.renderStep5Metrics === 'function') {
+        const visibleRows = Object.values(best).map(b => b.row);
+        window.renderStep5Metrics(visibleRows);
+        if (typeof window.renderStep5Charts === 'function') {
+          window.renderStep5Charts(visibleRows);
+        }
+      }
+    }
   }
 }
 
@@ -789,10 +826,14 @@ window.addEventListener('resize', function () { clearTimeout(window._p8T); windo
 let retrainTimer;
 function triggerRetrain() {
   if (!document.getElementById('autoRetrain')?.checked) return;
+  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
+
+  // Disable auto-retrain for models with multiple dual-dependent sliders
+  if (activeModel === 'rf' || activeModel === 'lr') return;
+
   clearTimeout(retrainTimer);
   const ts = document.getElementById('trainingStatus');
   const tm = document.getElementById('trainingMsg');
-  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
 
   if (ts && tm) {
     ts.style.display = 'block';
@@ -821,7 +862,7 @@ async function doRealTraining(activeModel) {
     params.c = parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3));
   } else if (activeModel === 'dt') {
     params.depth = document.getElementById('dtDepth')?.value || 5;
-    params.criterion = "gini";
+    params.criterion = document.querySelector('#params-dt select')?.value || "gini";
   } else if (activeModel === 'rf') {
     params.trees = document.getElementById('rfTrees')?.value || 100;
     params.depth = document.getElementById('rfDepth')?.value || 10;
@@ -879,16 +920,26 @@ async function doRealTraining(activeModel) {
     const tab = document.querySelector(`.model-tab[data-model="${activeModel}"]`);
     if (tab) tab.classList.add('trained');
 
-    const tbody = document.getElementById('compareBody');
-    const emptyRow = document.getElementById('emptyCompareRow');
-    if (emptyRow) emptyRow.remove();
-
+    const tbody = document.getElementById('currentModelBody');
+    if (tbody) tbody.innerHTML = ''; // Ensure only 1 record
+    
     const tr = document.createElement('tr');
+    tr.dataset.modelId = activeModel;
+    // Store accuracy as numeric data attribute so Step 5 can easily find the max
+    tr.dataset.accuracy = parseFloat(data.accuracy) || 0;
+    tr.dataset.precision = data.precision || '0%';
+    tr.dataset.f1 = data.f1_score || '0%';
+    tr.dataset.tn = data.tn || 0;
+    tr.dataset.fp = data.fp || 0;
+    tr.dataset.fn = data.fn || 0;
+    tr.dataset.tp = data.tp || 0;
+    tr.dataset.rocPoints = JSON.stringify(data.roc_points || []);
+    
     const sensMatches = data.sensitivity.match(/\d+/);
     const sensVal = sensMatches ? parseInt(sensMatches[0], 10) : 0;
-    const sensCls = sensVal >= 70 ? 'good' : sensVal >= 60 ? 'warn' : 'bad';
-    tr.innerHTML = `<td>${data.model_name_display}</td><td>${data.accuracy}</td><td class="delta ${sensCls}">${data.sensitivity}</td><td>${data.specificity}</td><td>${data.auc}</td>`;
-    tbody.appendChild(tr);
+    const sensCls = sensVal >= 70 ? 'good' : sensVal >= 50 ? 'warn' : 'bad';
+    tr.innerHTML = `<td>${data.model_name_display}</td><td>${data.accuracy}</td><td class="delta ${sensCls}">${data.sensitivity}</td><td>${data.specificity}</td><td>${data.auc}</td><td></td>`;
+    if (tbody) tbody.appendChild(tr);
 
   } catch (e) {
     console.error(e);
@@ -906,8 +957,67 @@ document.getElementById('trainBtn').addEventListener('click', () => {
 });
 
 document.getElementById('addCompare').addEventListener('click', () => {
-  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
-  doRealTraining(activeModel);
+  function showWarningBanner(msg) {
+    let warnDiv = document.getElementById('compareWarningBanner');
+    if (!warnDiv) {
+      warnDiv = document.createElement('div');
+      warnDiv.id = 'compareWarningBanner';
+      warnDiv.className = 'banner bad';
+      warnDiv.style.marginTop = '10px';
+      warnDiv.style.marginBottom = '10px';
+      const cBody = document.getElementById('compareCard');
+      if (cBody && cBody.parentNode) {
+        cBody.parentNode.insertBefore(warnDiv, cBody);
+      }
+    }
+    warnDiv.innerHTML = `<div class="banner-icon">🚫</div><div><b>Action Required:</b> ${msg}</div>`;
+    warnDiv.style.display = 'flex';
+    setTimeout(() => { warnDiv.style.display = 'none'; }, 4000);
+  }
+
+  const currentBody = document.getElementById('currentModelBody');
+  const currentRow = currentBody ? currentBody.querySelector('tr') : null;
+  
+  if (!currentRow || currentRow.id === 'emptyCurrentModelRow') {
+    showWarningBanner("You haven't trained a model yet. Please train a model first before comparing.");
+    return;
+  }
+  
+  const compareBody = document.getElementById('compareBody');
+  const emptyCompareRow = document.getElementById('emptyCompareRow');
+  if (emptyCompareRow) emptyCompareRow.remove();
+  
+  const existingRows = compareBody.querySelectorAll('tr');
+  let duplicate = false;
+  existingRows.forEach(row => {
+    if (row.dataset.originalHtml === currentRow.innerHTML) {
+      duplicate = true;
+    }
+  });
+  
+  if (duplicate) {
+    showWarningBanner("This exact model (with the same parameters and results) is already in the comparison table.");
+    return;
+  }
+  
+  const clone = currentRow.cloneNode(true);
+  clone.dataset.originalHtml = currentRow.innerHTML;
+  
+  const actionTd = clone.querySelector('td:last-child');
+  if (actionTd) {
+    actionTd.innerHTML = `<button class="btn" style="padding: 4px 8px; font-size: 11px; border: 1px solid var(--bad); color: var(--bad); background: transparent;" title="Remove this model">✕</button>`;
+    actionTd.querySelector('button').addEventListener('click', function() {
+      clone.remove();
+      if (compareBody.querySelectorAll('tr').length === 0) {
+        compareBody.innerHTML = `<tr id="emptyCompareRow"><td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a model to view comparison results.</td></tr>`;
+      }
+    });
+  }
+  
+  compareBody.appendChild(clone);
+  
+  const warnDiv = document.getElementById('compareWarningBanner');
+  if (warnDiv) warnDiv.style.display = 'none';
 });
 
 // ── ETHICS CHECKLIST ──────────────────────────────────────────────
@@ -973,7 +1083,7 @@ function openDownloadSummary() {
   const checklist = document.querySelectorAll('#euChecklist .check-item');
   const checked = [...checklist].filter(el => el.classList.contains('checked')).length;
   const total = Math.max(checklist.length, 1);
-  const compareRows = document.querySelectorAll('#compareBody tr');
+  const compareRows = document.querySelectorAll('#compareBody tr:not([style*="display: none"])');
   const compareRowsHtml = compareRows.length
     ? [...compareRows].map(tr => {
       const cells = tr.querySelectorAll('td');
@@ -1248,7 +1358,7 @@ document.getElementById('openMapper')?.addEventListener('click', () => { setTime
     const lbl = document.getElementById('knnKVizLabel');
     if (lbl) lbl.textContent = k;
   });
-  wire('svmC', 'svmCVal', v => parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3)));
+  wire('svmC', 'svmCVal', v => Math.pow(10, (v - 5) / 2).toFixed(2));
   document.getElementById('svmKernel')?.addEventListener('change', () => { if (activeModel === 'svm') drawSVM(); });
   wire('dtDepth', 'dtDepthVal');
   wire('rfTrees', 'rfTreesVal', null, t => {
@@ -1256,7 +1366,7 @@ document.getElementById('openMapper')?.addEventListener('click', () => { setTime
     if (tv) tv.textContent = t;
   });
   wire('rfDepth', 'rfDepthVal');
-  wire('lrC', 'lrCVal', v => parseFloat((Math.pow(10, (v - 5) / 2)).toFixed(3)));
+  wire('lrC', 'lrCVal', v => Math.pow(10, (v - 5) / 2).toFixed(2));
   wire('lrIter', 'lrIterVal');
 
   // Also update KNN label when knnK changes

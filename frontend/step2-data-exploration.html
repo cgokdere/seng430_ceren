@@ -686,6 +686,10 @@
               </div>
               <div class="slider-hint">Same as a single Decision Tree. Controls how complex each voting 'doctor' is
                 allowed to get.</div>
+              <div class="banner warn" style="margin-top:12px;">
+                <div class="banner-icon">⏳</div>
+                <div><b>Auto-retrain disabled:</b> Please adjust both sliders as needed, then click <b>⚡ Train Model</b>.</div>
+              </div>
             </div>
 
             <div id="params-lr" style="display:none;">
@@ -707,6 +711,10 @@
                   <input type="range" min="100" max="2000" step="100" value="1000" id="lrIter" class="live-param" />
                   <div class="slider-val" id="lrIterVal">1000</div>
                 </div>
+              </div>
+              <div class="banner warn" style="margin-top:12px;">
+                <div class="banner-icon">⏳</div>
+                <div><b>Auto-retrain disabled:</b> Please adjust both sliders as needed, then click <b>⚡ Train Model</b>.</div>
               </div>
             </div>
 
@@ -730,8 +738,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn teal" id="trainBtn" style="flex:1;">⚡ Train Model</button>
-              <button class="btn" id="addCompare">+ Compare</button>
+              <button class="btn teal" id="trainBtn" style="width:100%;">⚡ Train Model</button>
             </div>
             <div id="trainingStatus" style="display:none;margin-top:10px;">
               <div class="banner info">
@@ -915,6 +922,31 @@
             </div>
           </div>
 
+          <div class="card" id="currentModelCard" style="margin-top:12px;">
+            <div class="card-title" style="color:var(--primary);">Current Model</div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Model &amp; Settings</th>
+                    <th>Accuracy</th>
+                    <th>Sensitivity ★</th>
+                    <th>Specificity</th>
+                    <th>AUC</th>
+                    <th style="width:40px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="currentModelBody">
+                  <tr id="emptyCurrentModelRow">
+                    <td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a model to view current results.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:12px;">Only the most recently trained model is shown here. Click "+ Compare" below to save it to the comparison list.</div>
+            <button class="btn" id="addCompare" style="width:100%;">+ Compare</button>
+          </div>
+
           <div class="card" id="compareCard" style="margin-top:12px;">
             <div class="card-title">Model Comparison</div>
             <div class="tbl-wrap">
@@ -926,11 +958,12 @@
                     <th>Sensitivity ★</th>
                     <th>Specificity</th>
                     <th>AUC</th>
+                    <th style="width:40px;"></th>
                   </tr>
                 </thead>
                 <tbody id="compareBody">
                   <tr id="emptyCompareRow">
-                    <td colspan="5" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a
+                    <td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a
                       model to view comparison results.</td>
                   </tr>
                 </tbody>
@@ -941,13 +974,13 @@
           </div>
         </div>
 
-        <div class="banner bad" id="step4ReadyBanner" style="display: none; margin-top: 24px;">
-          <div class="banner-icon">🚫</div>
-          <div><b>Action required:</b> You must train at least one model in Step 4 before viewing the results in Step 5.
-          </div>
-        </div>
-
       </div>
+      
+      <div class="banner bad" id="step4ReadyBanner" style="display: none; margin-top: 24px; margin-bottom: 16px;">
+        <div class="banner-icon">🚫</div>
+        <div><b>Action required:</b> You must train at least one model in Step 4 before viewing the results in Step 5.</div>
+      </div>
+
       <div class="screen-footer">
         <small>Step 4 / 7 · Model &amp; Parameters</small>
         <div style="display:flex;gap:8px;">
@@ -970,145 +1003,23 @@
       </div>
     </div>
 
+    <!-- MODEL PILLS FOR STEP 5 -->
+    <div class="domain-scroll-wrapper" style="margin-bottom:20px; display:none;" id="step5ModelPillsWrapper">
+      <div class="domain-bar" id="step5ModelPills">
+        <!-- Model pills will be injected here -->
+      </div>
+    </div>
+
     <div class="cols">
       <div style="display:flex; flex-direction:column; gap:16px;">
-        <!-- 6 metric cards -->
-        <div class="card">
-          <div class="card-title">Performance Metrics — KNN (K=5) on Test Patients</div>
-          <div class="kpis">
-            <div class="kpi">
-              <div class="kpi-val">78%</div>
-              <div class="kpi-name">Accuracy</div>
-              <div class="kpi-note">Overall correct predictions out of all test patients</div>
-            </div>
-            <div class="kpi warn">
-              <div class="kpi-val">62%</div>
-              <div class="kpi-name">Sensitivity ★</div>
-              <div class="kpi-note">Of patients who WERE readmitted, how many did we catch?</div>
-            </div>
-            <div class="kpi good">
-              <div class="kpi-val">85%</div>
-              <div class="kpi-name">Specificity</div>
-              <div class="kpi-note">Of patients who were NOT readmitted, how many did we correctly call safe?</div>
-            </div>
-          </div>
-          <div class="kpis" style="margin-top:10px;">
-            <div class="kpi">
-              <div class="kpi-val">58%</div>
-              <div class="kpi-name">Precision</div>
-              <div class="kpi-note">Of patients we flagged as high risk, how many actually were?</div>
-            </div>
-            <div class="kpi">
-              <div class="kpi-val">60%</div>
-              <div class="kpi-name">F1 Score</div>
-              <div class="kpi-note">Balance between catching cases and avoiding false alarms</div>
-            </div>
-            <div class="kpi good">
-              <div class="kpi-val">0.81</div>
-              <div class="kpi-name">AUC-ROC</div>
-              <div class="kpi-note">Overall ability to separate readmitted from not-readmitted (0.5=random,
-                1.0=perfect)</div>
-            </div>
-          </div>
-          <div class="banner bad" style="margin-top:12px;" id="sensitivityWarning">
-            <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
-                <path d="M12 9v4"></path>
-                <path d="M12 17h.01"></path>
-              </svg></div>
-            <div><b>Low Sensitivity:</b> This model misses 38% of patients who will actually be readmitted. Go back to
-              Step 4 and try a different model or adjust K.</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">ROC Curve — How Well Does the Model Separate the Two Groups?</div>
-          <svg class="roc-svg" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"
-            style="border:1px solid var(--line);border-radius:12px;background:#f7f9fb">
-            <text x="10" y="14" fill="currentColor" style="color:var(--text-muted)" font-size="9"
-              font-family="DM Mono">1.0</text>
-            <text x="10" y="152" fill="currentColor" style="color:var(--text-muted)" font-size="9"
-              font-family="DM Mono">0</text>
-            <text x="270" y="152" fill="currentColor" style="color:var(--text-muted)" font-size="9"
-              font-family="DM Mono">1.0</text>
-            <line x1="30" y1="10" x2="30" y2="150" stroke="#dde4ea" stroke-width="1" />
-            <line x1="30" y1="150" x2="290" y2="150" stroke="#dde4ea" stroke-width="1" />
-            <!-- Diagonal (random) -->
-            <line x1="30" y1="150" x2="290" y2="10" stroke="#dde4ea" stroke-width="1" stroke-dasharray="4,3" />
-            <!-- ROC curve -->
-            <path d="M30,150 C60,120 80,60 120,40 C160,22 200,15 290,10" fill="none" stroke="currentColor"
-              style="color:var(--primary)" stroke-width="2.5" />
-            <text x="100" y="90" fill="currentColor" style="color:var(--primary)" font-size="10" font-weight="bold"
-              font-family="DM Sans">AUC = 0.81</text>
-          </svg>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">A perfect model would go
-            straight to the top-left corner. Our curve (blue) is well above the diagonal line (random guessing), which
-            is good. AUC of 0.81 = good discriminative ability.</div>
+        <!-- dynamic step 5 metric cards -->
+        <div class="card" id="step5MetricsContainer">
+          <div style="color:var(--muted);font-size:13px;padding:12px 0;">Loading performance metrics...</div>
         </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:16px;">
-        <div class="card">
-          <div class="card-title">Confusion Matrix — What Did the Model Get Right and Wrong?</div>
-          <div style="font-size:12px;color:var(--mid);margin-bottom:10px;">This 2×2 table shows the model's
-            predictions vs. what actually happened for the 61 test patients.</div>
-          <div class="cm-grid">
-            <div class="cm-corner"></div>
-            <div class="cm-col-hdr">Predicted: NOT Readmitted</div>
-            <div class="cm-col-hdr">Predicted: READMITTED</div>
-            <div class="cm-row-hdr"
-              style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:600;color:var(--muted);">
-              Actual: NOT Readmitted</div>
-            <div class="cm-cell cm-tn">
-              <div class="cm-num">36</div>
-              <div class="cm-lbl"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--good);">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg> Correctly called safe</div>
-            </div>
-            <div class="cm-cell cm-fp">
-              <div class="cm-num">5</div>
-              <div class="cm-lbl"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
-                  <path d="M12 9v4"></path>
-                  <path d="M12 17h.01"></path>
-                </svg> False alarm (extra follow-up)</div>
-            </div>
-            <div class="cm-row-hdr"
-              style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:600;color:var(--muted);">
-              Actual: READMITTED</div>
-            <div class="cm-cell cm-fn">
-              <div class="cm-num">8</div>
-              <div class="cm-lbl">❌ Missed — returned to hospital</div>
-            </div>
-            <div class="cm-cell cm-tp">
-              <div class="cm-num">12</div>
-              <div class="cm-lbl"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--good);">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg> Correctly flagged high-risk</div>
-            </div>
-          </div>
-          <div class="banner bad" style="margin-top:12px;">
-            <div class="banner-icon">❌</div>
-            <div><b>8 patients were missed (False Negatives).</b> These patients were sent home without extra support
-              but returned to hospital within 30 days. In clinical practice, reducing these is the priority.</div>
-          </div>
-          <div class="banner info" style="margin-top:8px;">
-            <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 16v-4"></path>
-                <path d="M12 8h.01"></path>
-              </svg></div>
-            <div><b>5 False Positives</b> caused unnecessary follow-up calls. This is a cost, but not a safety risk.
-              Usually preferable to missing real readmissions.</div>
-          </div>
-        </div>
+      <div style="display:flex; flex-direction:column; gap:16px;" id="step5ChartsContainer">
+        <!-- Dynamic ROC Curves and Confusion Matrices will be injected here by renderStep5Charts -->
       </div>
     </div>
     <div class="screen-footer">
@@ -1656,5 +1567,6 @@
   <script src="domain_datasets.js"></script>
   <script src="step2_backend.js"></script>
   <script src="step3_backend.js"></script>
+  <script src="step5-backend.js"></script>
 </body>
 </html>
