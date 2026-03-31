@@ -674,8 +674,11 @@
                 </div>
                 <div class="slider-ends"><span>1 (very similar)</span><span>25 (very general)</span></div>
               </div>
-              <div class="slider-hint">Number of similar patients used for prediction. Low K = very similar, High K =
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>Number of similar patients used for prediction. Low K = very similar, High K =
                 considers more patients. K=5–7 is a good starting point.</div>
+              </div>
 
               <label class="lbl">Distance Measure (How "Similarity" is Calculated)</label>
               <select class="sel live-param" id="knnDist">
@@ -700,9 +703,12 @@
                 </div>
                 <div class="slider-ends"><span>0.01 (loose fit)</span><span>100 (strict fit)</span></div>
               </div>
-              <div class="slider-hint">Low C allows a wider, looser boundary that generalizes better. High C forces the
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>Low C allows a wider, looser boundary that generalizes better. High C forces the
                 boundary to twist and bend so it correctly classifies every single training patient, risking
                 memorization.</div>
+              </div>
             </div>
 
             <div id="params-dt" style="display:none;">
@@ -715,8 +721,11 @@
                 </div>
                 <div class="slider-ends"><span>1 (very simple)</span><span>15 (very detailed)</span></div>
               </div>
-              <div class="slider-hint">A deeper tree asks more questions. Too deep = it memorises training patients
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>A deeper tree asks more questions. Too deep = it memorises training patients
                 (overfitting) and fails on new ones.</div>
+              </div>
               <label class="lbl">Split Criterion (How to Choose the Best Question)</label>
               <select class="sel live-param">
                 <option>Gini impurity — most common choice</option>
@@ -734,8 +743,11 @@
                 </div>
                 <div class="slider-ends"><span>10 (fast)</span><span>300 (stable)</span></div>
               </div>
-              <div class="slider-hint">More trees = more stable predictions, but slower to train. Helps prevent
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>More trees = more stable predictions, but slower to train. Helps prevent
                 overfitting. Each tree votes — the majority vote wins.</div>
+              </div>
               <label class="lbl">Maximum Depth Per Tree</label>
               <div class="slider-wrap">
                 <div class="slider-row">
@@ -743,8 +755,11 @@
                   <div class="slider-val" id="rfDepthVal">10</div>
                 </div>
               </div>
-              <div class="slider-hint">Same as a single Decision Tree. Controls how complex each voting 'doctor' is
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>Same as a single Decision Tree. Controls how complex each voting 'doctor' is
                 allowed to get.</div>
+              </div>
             </div>
 
             <div id="params-lr" style="display:none;">
@@ -757,9 +772,12 @@
                 </div>
                 <div class="slider-ends"><span>Strong (simple)</span><span>Weak (complex)</span></div>
               </div>
-              <div class="slider-hint">Low C (Strong Regularisation) forces the model to consider all symptoms evenly,
+              <div class="banner info" style="margin-top: 10px;">
+                <div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--info);"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+                <div>Low C (Strong Regularisation) forces the model to consider all symptoms evenly,
                 keeping predictions smooth. High C (Weak Regularisation) allows the model to rely extremely heavily on a
                 single symptom if it seems highly predictive.</div>
+              </div>
               <label class="lbl">Maximum Iterations (How Long to Train)</label>
               <div class="slider-wrap">
                 <div class="slider-row">
@@ -788,6 +806,7 @@
               </div>
             </div>
 
+            <div id="autoRetrainStatusText" style="text-align:center; font-size:12px; font-weight:600; color:var(--primary); margin-bottom:8px;">Auto-retrain is active</div>
             <div class="btn-row">
               <button class="btn teal" id="trainBtn" style="width:100%;">⚡ Train Model</button>
             </div>
@@ -1106,10 +1125,13 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-title">ROC Curve — How Well Does the Model Separate the Two Groups?</div>
-          <svg class="roc-svg" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"
-            style="border:1px solid var(--line);border-radius:12px;background:#f7f9fb">
+        <div class="card" style="padding: 24px;">
+          <div style="display:flex; align-items:center; gap:12px; font-size:12px; letter-spacing:1.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom: 20px;">
+            <span id="rocTitleLabel">ROC CURVE — KNN (K=5)</span>
+            <div style="flex:1; height:1px; background:var(--line);"></div>
+          </div>
+          <svg id="rocSvgCurve" class="roc-svg" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"
+            style="display:block; width:100%; border-radius:12px; background:#fbfbf9; padding:16px 8px 8px 8px; box-sizing: border-box;">
             <text x="10" y="14" fill="currentColor" style="color:var(--text-muted)" font-size="9"
               font-family="DM Mono">1.0</text>
             <text x="10" y="152" fill="currentColor" style="color:var(--text-muted)" font-size="9"
@@ -1119,16 +1141,16 @@
             <line x1="30" y1="10" x2="30" y2="150" stroke="#dde4ea" stroke-width="1" />
             <line x1="30" y1="150" x2="290" y2="150" stroke="#dde4ea" stroke-width="1" />
             <!-- Diagonal (random) -->
-            <line x1="30" y1="150" x2="290" y2="10" stroke="#dde4ea" stroke-width="1" stroke-dasharray="4,3" />
+            <line x1="30" y1="150" x2="290" y2="10" stroke="#dde4ea" stroke-width="1.5" stroke-dasharray="4,4" />
             <!-- ROC curve -->
-            <path d="M30,150 C60,120 80,60 120,40 C160,22 200,15 290,10" fill="none" stroke="currentColor"
-              style="color:var(--primary)" stroke-width="2.5" />
-            <text x="100" y="90" fill="currentColor" style="color:var(--primary)" font-size="10" font-weight="bold"
-              font-family="DM Sans">AUC = 0.81</text>
+            <path id="rocCurvePath" d="M30,150 C60,120 80,60 120,40 C160,22 200,15 290,10" fill="none" stroke="currentColor"
+              style="color:#a09e35" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <text id="rocAucText" x="120" y="90" fill="currentColor" style="color:#a09e35" font-size="11" font-weight="800"
+              font-family="system-ui, sans-serif">AUC = 0.81</text>
           </svg>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">A perfect model would go
-            straight to the top-left corner. Our curve (blue) is well above the diagonal line (random guessing), which
-            is good. AUC of 0.81 = good discriminative ability.</div>
+          <div id="rocExplainText" style="font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5;">
+            The ROC Curve illustrates the trade-off between sensitivity (catching real cases) and specificity (avoiding false alarms). The dashed line represents random guessing. The model's curve lies above the diagonal, indicating strong discriminative ability. <b>AUC of 0.81</b> means it correctly distinguishes safe vs. readmitted patients 81% of the time.
+          </div>
         </div>
       </div>
 

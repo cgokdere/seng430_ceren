@@ -25,7 +25,7 @@ function renderStep5Pills() {
     const isActive = modelName === window.activeStep5Model ? 'active' : '';
     html += `<div class="domain-pill ${isActive}" data-model="${modelName}" style="cursor:pointer;">${modelName}</div>`;
   });
-  
+
   container.innerHTML = html;
 
   const pills = container.querySelectorAll('.domain-pill');
@@ -136,19 +136,29 @@ function renderStep5Metrics(bestRows, skipPillsRender = false) {
   }
 
   html += `
-    <div class="card" style="margin-top:16px;">
-      <div class="card-title">ROC Curve — ${modelName}</div>
-      <svg class="roc-svg" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"
-        style="border:1px solid var(--line);border-radius:12px;background:#f7f9fb;width:100%;height:auto;">
+    <div class="card" style="padding: 24px; margin-top:16px;">
+      <div style="display:flex; align-items:center; gap:12px; font-size:12px; letter-spacing:1.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom: 20px;">
+        <span id="rocTitleLabel">ROC CURVE — ${modelName}</span>
+        <div style="flex:1; height:1px; background:var(--line);"></div>
+      </div>
+      <svg id="rocSvgCurve" class="roc-svg" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"
+        style="display:block; width:100%; border-radius:12px; background:#fbfbf9; padding:16px 8px 8px 8px; box-sizing: border-box;">
         <text x="10" y="14" fill="currentColor" style="color:var(--text-muted)" font-size="9" font-family="DM Mono">1.0</text>
         <text x="10" y="152" fill="currentColor" style="color:var(--text-muted)" font-size="9" font-family="DM Mono">0</text>
         <text x="270" y="152" fill="currentColor" style="color:var(--text-muted)" font-size="9" font-family="DM Mono">1.0</text>
         <line x1="30" y1="10" x2="30" y2="150" stroke="#dde4ea" stroke-width="1" />
         <line x1="30" y1="150" x2="290" y2="150" stroke="#dde4ea" stroke-width="1" />
-        <line x1="30" y1="150" x2="290" y2="10" stroke="#dde4ea" stroke-width="1" stroke-dasharray="4,3" />
-        <path d="${pathD}" fill="none" stroke="currentColor" style="color:var(--primary)" stroke-width="2.5" />
-        <text x="100" y="90" fill="currentColor" style="color:var(--primary)" font-size="10" font-weight="bold" font-family="DM Sans">AUC = ${(parseFloat(auc) || 0).toFixed(2)}</text>
+        <!-- Diagonal (random) -->
+        <line x1="30" y1="150" x2="290" y2="10" stroke="#dde4ea" stroke-width="1.5" stroke-dasharray="4,4" />
+        <!-- ROC curve -->
+        <path id="rocCurvePath" d="${pathD}" fill="none" stroke="currentColor"
+          style="color:#a09e35" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        <text id="rocAucText" x="120" y="90" fill="currentColor" style="color:#a09e35" font-size="11" font-weight="800"
+          font-family="system-ui, sans-serif">AUC = ${(parseFloat(auc) || 0).toFixed(2)}</text>
       </svg>
+      <div id="rocExplainText" style="font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5;">
+        The ROC Curve illustrates the trade-off between sensitivity (catching real cases) and specificity (avoiding false alarms). The dashed line represents random guessing. The model's curve lies above the diagonal, indicating strong discriminative ability. <b>AUC of ${(parseFloat(auc) || 0).toFixed(2)}</b> means it correctly distinguishes safe vs. readmitted patients ${((parseFloat(auc) || 0) * 100).toFixed(0)}% of the time.
+      </div>
     </div>
   `;
 

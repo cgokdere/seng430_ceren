@@ -49,7 +49,7 @@ function showStep(n) {
           r.style.display = '';
         }
       });
-      
+
       // Pass the visible rows to step5-backend.js if defined
       if (typeof window.renderStep5Metrics === 'function') {
         const visibleRows = Object.values(best).map(b => b.row);
@@ -922,7 +922,7 @@ async function doRealTraining(activeModel) {
 
     const tbody = document.getElementById('currentModelBody');
     if (tbody) tbody.innerHTML = ''; // Ensure only 1 record
-    
+
     const tr = document.createElement('tr');
     tr.dataset.modelId = activeModel;
     // Store accuracy as numeric data attribute so Step 5 can easily find the max
@@ -934,7 +934,7 @@ async function doRealTraining(activeModel) {
     tr.dataset.fn = data.fn || 0;
     tr.dataset.tp = data.tp || 0;
     tr.dataset.rocPoints = JSON.stringify(data.roc_points || []);
-    
+
     const sensMatches = data.sensitivity.match(/\d+/);
     const sensVal = sensMatches ? parseInt(sensMatches[0], 10) : 0;
     const sensCls = sensVal >= 70 ? 'good' : sensVal >= 50 ? 'warn' : 'bad';
@@ -977,16 +977,16 @@ document.getElementById('addCompare').addEventListener('click', () => {
 
   const currentBody = document.getElementById('currentModelBody');
   const currentRow = currentBody ? currentBody.querySelector('tr') : null;
-  
+
   if (!currentRow || currentRow.id === 'emptyCurrentModelRow') {
     showWarningBanner("You haven't trained a model yet. Please train a model first before comparing.");
     return;
   }
-  
+
   const compareBody = document.getElementById('compareBody');
   const emptyCompareRow = document.getElementById('emptyCompareRow');
   if (emptyCompareRow) emptyCompareRow.remove();
-  
+
   const existingRows = compareBody.querySelectorAll('tr');
   let duplicate = false;
   existingRows.forEach(row => {
@@ -994,28 +994,28 @@ document.getElementById('addCompare').addEventListener('click', () => {
       duplicate = true;
     }
   });
-  
+
   if (duplicate) {
     showWarningBanner("This exact model (with the same parameters and results) is already in the comparison table.");
     return;
   }
-  
+
   const clone = currentRow.cloneNode(true);
   clone.dataset.originalHtml = currentRow.innerHTML;
-  
+
   const actionTd = clone.querySelector('td:last-child');
   if (actionTd) {
     actionTd.innerHTML = `<button class="btn" style="padding: 4px 8px; font-size: 11px; border: 1px solid var(--bad); color: var(--bad); background: transparent;" title="Remove this model">✕</button>`;
-    actionTd.querySelector('button').addEventListener('click', function() {
+    actionTd.querySelector('button').addEventListener('click', function () {
       clone.remove();
       if (compareBody.querySelectorAll('tr').length === 0) {
         compareBody.innerHTML = `<tr id="emptyCompareRow"><td colspan="6" style="text-align:center; color:var(--text-muted, #888); padding: 16px;">Train a model to view comparison results.</td></tr>`;
       }
     });
   }
-  
+
   compareBody.appendChild(clone);
-  
+
   const warnDiv = document.getElementById('compareWarningBanner');
   if (warnDiv) warnDiv.style.display = 'none';
 });
@@ -1793,3 +1793,31 @@ btnCStandard?.addEventListener('click', () => {
   document.documentElement.setAttribute('data-theme', restoredTheme);
   btnCStandard.classList.add('active'); btnCHigh.classList.remove('active');
 });
+
+// ── AUTO-RETRAIN STATUS TEXT ──────────────────────────────────────
+function updateAutoRetrainText() {
+  const checkbox = document.getElementById('autoRetrain');
+  const statusText = document.getElementById('autoRetrainStatusText');
+  if (!checkbox || !statusText) return;
+
+  const activeModel = document.querySelector('.model-tab.active')?.dataset.model || 'knn';
+  if (activeModel === 'rf' || activeModel === 'lr') {
+    statusText.style.display = 'none';
+    return;
+  }
+
+  statusText.style.display = 'block';
+  if (checkbox.checked) {
+    statusText.textContent = 'Auto-retrain is active';
+    statusText.style.color = 'var(--primary)';
+  } else {
+    statusText.textContent = 'Auto-retrain is disabled';
+    statusText.style.color = 'var(--text-muted, #6b7280)';
+  }
+}
+
+document.getElementById('autoRetrain')?.addEventListener('change', updateAutoRetrainText);
+document.querySelectorAll('.model-tab').forEach(tab => tab.addEventListener('click', () => setTimeout(updateAutoRetrainText, 50)));
+// Initialise on load
+document.addEventListener('DOMContentLoaded', updateAutoRetrainText);
+setTimeout(updateAutoRetrainText, 100);
