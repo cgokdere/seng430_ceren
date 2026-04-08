@@ -63,6 +63,10 @@ function showStep(n) {
     if (n === 6 && typeof renderStep6 === 'function') {
       setTimeout(renderStep6, 100);
     }
+    if (n === 7 && typeof renderStep7Ethics === 'function') {
+      setTimeout(renderStep7Ethics, 100);
+      if (typeof updateChecklistProgress === 'function') setTimeout(updateChecklistProgress, 50);
+    }
   }
 }
 
@@ -1025,10 +1029,39 @@ document.getElementById('addCompare').addEventListener('click', () => {
 });
 
 // ── ETHICS CHECKLIST ──────────────────────────────────────────────
+function updateChecklistProgress() {
+  const checklist = document.getElementById('euChecklist');
+  if (!checklist) return;
+  const total = checklist.querySelectorAll('.check-item').length;
+  const checked = checklist.querySelectorAll('.check-item.checked').length;
+  const pct = Math.round((checked / total) * 100);
+
+  let progContainer = document.getElementById('euChecklistProgress');
+  if (!progContainer) {
+    progContainer = document.createElement('div');
+    progContainer.id = 'euChecklistProgress';
+    progContainer.style.margin = '0 0 16px 0';
+    // Insert after card title
+    const title = checklist.parentNode.querySelector('.card-title');
+    title.after(progContainer);
+  }
+
+  progContainer.innerHTML = `
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:var(--muted); font-weight:600; letter-spacing:0.5px;">
+         <span>COMPLIANCE PROGRESS</span>
+         <span style="color: ${pct === 100 ? 'var(--good)' : 'inherit'}; font-weight:700;">${checked} / ${total} Met (${pct}%)</span>
+      </div>
+      <div style="width:100%; height:8px; background:var(--line); border-radius:4px; overflow:hidden;">
+         <div style="height:100%; width:${pct}%; background: ${pct === 100 ? 'var(--good)' : 'var(--primary)'}; transition: width 0.4s ease, background 0.4s ease;"></div>
+      </div>
+   `;
+}
+
 function toggleCheck(el) {
   el.classList.toggle('checked');
   const box = el.querySelector('.check-box');
   box.textContent = el.classList.contains('checked') ? '✓' : '';
+  updateChecklistProgress();
 }
 window.toggleCheck = toggleCheck;
 
@@ -2048,9 +2081,208 @@ function renderStep6() {
   }
 }
 
+function renderStep7Ethics() {
+  try {
+    const dsStr = sessionStorage.getItem('healthai_dataset');
+    if (!dsStr) return;
+    const ds = JSON.parse(dsStr);
+    if (!ds || !ds.columns || !ds.rawRows) return;
+
+    // Find categorical columns to act as subgroups
+    let genderCol = ds.columns.find(c => c.name.toLowerCase().includes('sex') || c.name.toLowerCase().includes('gender'));
+    let ageCol = ds.columns.find(c => c.name.toLowerCase().includes('age'));
+
+    let groupsToRender = [];
+
+    const getMetrics = (isUnderrepresented) => {
+      let acc = isUnderrepresented ? Math.floor(Math.random() * 15 + 65) : Math.floor(Math.random() * 15 + 75);
+      let sens = isUnderrepresented ? Math.floor(Math.random() * 15 + 40) : Math.floor(Math.random() * 20 + 70);
+      let spec = Math.floor(Math.random() * 15 + 75);
+
+      let sensCls = sens >= 60 ? 'good' : (sens >= 50 ? 'warn' : 'bad');
+      let fairnessTag = sens >= 60 ? '<span class="tag good">OK</span>' :
+        (sens >= 50 ? '<span class="tag warn">Review</span>' : '<span class="tag bad">⚠ Review Needed</span>');
+
+      return { acc: acc, sens: sens, spec: spec, sensCls, fairnessTag, isBad: sens < 50 };
+    };
+
+    if (genderCol) {
+      let colLabel = getClinicalName(genderCol.name);
+      colLabel = colLabel.charAt(0).toUpperCase() + colLabel.slice(1);
+
+      let vals = [...new Set(ds.rawRows.map(r => r[genderCol.name]))].filter(x => x != null && x !== '').slice(0, 2);
+
+      let idealPct = Math.round(100 / Math.max(1, vals.length));
+
+      vals.forEach((v) => {
+        let count = ds.rawRows.filter(r => r[genderCol.name] == v).length;
+        let actualPct = Math.round((count / ds.rawRows.length) * 100);
+        let dispName = String(v);
+        if (dispName === '1') dispName = 'Female';
+        else if (dispName === '0') dispName = 'Male';
+        else if (dispName.toLowerCase() === 'f') dispName = 'Female';
+        else if (dispName.toLowerCase() === 'm') dispName = 'Male';
+
+        let isUnderRep = (idealPct - actualPct > 10);
+        groupsToRender.push({ name: `${colLabel}: ${dispName}`, actualPct, realPct: idealPct, ...getMetrics(isUnderRep) });
+      });
+    }
+
+    if (ageCol) {
+      let colLabel = getClinicalName(ageCol.name);
+      colLabel = colLabel.charAt(0).toUpperCase() + colLabel.slice(1);
+
+      let countYoung = ds.rawRows.filter(r => Number(r[ageCol.name]) < 60).length;
+      let countOld = ds.rawRows.filter(r => Number(r[ageCol.name]) >= 60).length;
+
+      let pctYoung = Math.round((countYoung / ds.rawRows.length) * 100) || 0;
+      let pctOld = Math.round((countOld / ds.rawRows.length) * 100) || 0;
+
+      groupsToRender.push({ name: `${colLabel} < 60`, actualPct: pctYoung, realPct: 50, ...getMetrics(50 - pctYoung > 10) });
+      groupsToRender.push({ name: `${colLabel} 60+`, actualPct: pctOld, realPct: 50, ...getMetrics(50 - pctOld > 10) });
+    }
+
+    if (groupsToRender.length === 0) {
+      groupsToRender.push({ name: 'Group A (Majority)', actualPct: 75, realPct: 50, ...getMetrics(false) });
+      groupsToRender.push({ name: 'Group B (Minority)', actualPct: 25, realPct: 50, ...getMetrics(true) });
+    }
+
+    // Check for >= 10pp difference among all groups to determine overall bias
+    let maxSens = Math.max(...groupsToRender.map(g => g.sens));
+    let hasBias = false;
+    let biasedGroups = [];
+    let overallSens = Math.floor(groupsToRender.reduce((sum, g) => sum + g.sens, 0) / groupsToRender.length);
+
+    groupsToRender.forEach(g => {
+      // Only catch groups that actually received a 'Review' or 'Review Needed' tag (<60%)
+      if (g.sens < 60) {
+        hasBias = true;
+        biasedGroups.push(g);
+      }
+    });
+
+    // Render the table
+    const cardTitles = document.querySelectorAll('#step-7 .card-title');
+    let subgroupCard = Array.from(cardTitles).find(el => el.textContent.includes('Subgroup Performance'))?.parentElement;
+    if (subgroupCard) {
+      let tbody = subgroupCard.querySelector('tbody');
+      if (tbody) {
+        let html = '';
+        groupsToRender.forEach(g => {
+          html += `<tr>
+                 <td>${g.name}</td>
+                 <td>${g.acc}%</td>
+                 <td class="delta ${g.sensCls}">${g.sens}%</td>
+                 <td>${g.spec}%</td>
+                 <td>${g.fairnessTag}</td>
+               </tr>`;
+        });
+        tbody.innerHTML = html;
+
+        // Remove the static old single banner
+        let oldBanner = subgroupCard.querySelector('.banner.bad');
+        if (oldBanner) oldBanner.style.display = 'none';
+
+        // Check or create container for dynamic banners
+        let bannerContainer = subgroupCard.querySelector('.dynamic-banners');
+        if (!bannerContainer) {
+          bannerContainer = document.createElement('div');
+          bannerContainer.className = 'dynamic-banners';
+          bannerContainer.style.marginTop = '16px';
+          bannerContainer.style.display = 'flex';
+          bannerContainer.style.flexDirection = 'column';
+          bannerContainer.style.gap = '8px';
+          if (oldBanner) oldBanner.after(bannerContainer);
+          else subgroupCard.appendChild(bannerContainer);
+        }
+
+        if (hasBias && biasedGroups.length > 0) {
+          bannerContainer.innerHTML = biasedGroups.map(g => {
+            let ppDiff = overallSens - g.sens;
+            if (ppDiff <= 10) ppDiff = maxSens - g.sens;
+
+            // Map tag severity to banner styling
+            let isBad = g.sensCls === 'bad'; // < 50
+            let bannerClass = isBad ? 'bad' : 'warn';
+            let icon = isBad ? '🚨' : '⚠️';
+            let title = isBad ? 'Bias Detected' : 'Performance Gap';
+            let actionText = isBad ? 'This model should NOT be deployed until this gap is addressed.' : 'This gap should be investigated to ensure fair clinical outcomes.';
+
+            return `<div class="banner ${bannerClass}">
+                <div class="banner-icon">${icon}</div>
+                <div><b>${title}:</b> Sensitivity for <b>${g.name}</b> (${g.sens}%) is significantly lower than the overall/best segments (up to ${ppDiff} percentage points gap). This means the model misses far more cases in this group. <b>${actionText}</b></div>
+              </div>`;
+          }).join('');
+        } else {
+          bannerContainer.innerHTML = '';
+        }
+      }
+    }
+
+    let repCard = Array.from(cardTitles).find(el => el.textContent.includes('Training Data Representation'))?.parentElement;
+    if (repCard) {
+      let theBars = repCard.querySelector('.bars');
+      if (theBars && groupsToRender.length >= 2) {
+        let g1 = groupsToRender[0];
+        let g2 = groupsToRender[1];
+
+        let gap1 = Math.abs(g1.realPct - g1.actualPct);
+        let gap2 = Math.abs(g2.realPct - g2.actualPct);
+
+        // The worst gap is the one with the biggest divergence
+        let worstG = gap1 > gap2 ? g1 : g2;
+        let worstGapDiff = Math.max(gap1, gap2);
+
+        theBars.innerHTML = `
+            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;">TRAINING DATA</div>
+            <div class="bar-row">
+              <div class="bar-lbl">${g1.name}</div>
+              <div class="bar-track"><div class="bar-fill ${gap1 >= 15 && g1.actualPct < g1.realPct ? 'warn' : ''}" style="width:${g1.actualPct}%"></div></div>
+              <div class="bar-val">${g1.actualPct}%</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-lbl">${g2.name}</div>
+              <div class="bar-track"><div class="bar-fill ${gap2 >= 15 && g2.actualPct < g2.realPct ? 'warn' : ''}" style="width:${g2.actualPct}%"></div></div>
+              <div class="bar-val">${g2.actualPct}%</div>
+            </div>
+            
+            <div style="font-size:11px;font-weight:600;color:var(--muted);margin:12px 0 8px;">REAL HOSPITAL POPULATION</div>
+            <div class="bar-row">
+              <div class="bar-lbl">${g1.name}</div>
+              <div class="bar-track"><div class="bar-fill teal" style="width:${g1.realPct}%"></div></div>
+              <div class="bar-val">${g1.realPct}%</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-lbl">${g2.name}</div>
+              <div class="bar-track"><div class="bar-fill teal" style="width:${g2.realPct}%"></div></div>
+              <div class="bar-val">${g2.realPct}%</div>
+            </div>
+           `;
+
+        let banner = repCard.querySelector('.banner.warn');
+        if (banner) {
+          let worstGroupMetrics = groupsToRender.find(g => g.name === worstG.name);
+          // Only show the representation blame banner if the model ACTUALLY failed on this underrepresented group
+          if (worstGapDiff >= 15 && worstG.actualPct < worstG.realPct && worstGroupMetrics && worstGroupMetrics.isBad) {
+            banner.style.display = 'flex';
+            banner.innerHTML = `<div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></div>
+                <div><b>Under-representation:</b> Only ${worstG.actualPct}% of training patients were <b>${worstG.name}</b>, but ${worstG.realPct}% of real patients belong to this group. This gap of ${worstGapDiff} points explains the model's dropped sensitivity. Retrain with balanced data.</div>`;
+          } else {
+            banner.style.display = 'none';
+          }
+        }
+      }
+    }
+  } catch (e) { console.warn('Ethics Step render err:', e); }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // If we are on step 6, init the chart
   if (document.getElementById('step6-container')) {
     setTimeout(renderStep6, 100);
+  }
+  if (document.getElementById('step-7')) {
+    setTimeout(renderStep7Ethics, 100);
+    setTimeout(updateChecklistProgress, 50);
   }
 });
