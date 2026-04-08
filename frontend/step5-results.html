@@ -9,6 +9,8 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 </head>
 
 <body>
@@ -1270,6 +1272,16 @@
               <div><b>5 False Positives</b> caused unnecessary follow-up calls. This is a cost, but not a safety risk.
                 Usually preferable to missing real readmissions.</div>
             </div>
+
+            <div class="card" id="correlationMatrixCard" style="margin-top: 16px;">
+              <div class="card-title">Feature Correlation Matrix</div>
+              <div style="font-size:12px;color:var(--mid);margin-bottom:10px;">Dark red indicates strong positive correlation, dark teal indicates strong negative. Values near 0 show independence.</div>
+              <div class="tbl-wrap" id="corrMatrixContainer">
+                <table style="font-size: 11px; text-align: center;">
+                   <!-- Rendered by JS -->
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1298,49 +1310,8 @@
         <div style="display:flex; flex-direction:column; gap:16px;">
           <div class="card">
             <div class="card-title">Most Important Patient Measurements (Overall)</div>
-            <div class="bars">
-              <div class="bar-row">
-                <div class="bar-lbl">Ejection Fraction</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:82%"></div>
-                </div>
-                <div class="bar-val">0.28</div>
-              </div>
-              <div class="bar-row">
-                <div class="bar-lbl">Serum Creatinine</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:66%"></div>
-                </div>
-                <div class="bar-val">0.22</div>
-              </div>
-              <div class="bar-row">
-                <div class="bar-lbl">Age</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:54%"></div>
-                </div>
-                <div class="bar-val">0.17</div>
-              </div>
-              <div class="bar-row">
-                <div class="bar-lbl">Time in Hospital</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:40%"></div>
-                </div>
-                <div class="bar-val">0.13</div>
-              </div>
-              <div class="bar-row">
-                <div class="bar-lbl">Serum Sodium</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:28%"></div>
-                </div>
-                <div class="bar-val">0.09</div>
-              </div>
-              <div class="bar-row">
-                <div class="bar-lbl">Smoking Status</div>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:16%"></div>
-                </div>
-                <div class="bar-val">0.05</div>
-              </div>
+            <div id="step6-container">
+              <canvas id="step6-feature-chart" style="height: 350px; width: 100%;"></canvas>
             </div>
             <div class="banner info" style="margin-top:12px;">
               <div class="banner-icon">💡</div>
@@ -1349,6 +1320,10 @@
                 risk factors in heart failure.</div>
             </div>
           </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          
 
           <div class="card">
             <div class="card-title">Single Patient Explanation</div>
@@ -1361,9 +1336,6 @@
             <div class="btn-row"><button class="btn teal" id="explainPatientBtn" style="width:100%;">Explain This
                 Patient →</button></div>
           </div>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:16px;">
           <div class="card" id="patientExplainCard">
             <div class="card-title" id="patientExplainTitle">Why Was Patient #47 Flagged as HIGH RISK? (78% probability)
             </div>

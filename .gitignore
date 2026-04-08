@@ -1,2 +1,30 @@
-# Python bytecode
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Node (frontend varsa)
+node_modules/
+
+# Build
+dist/
+build/
