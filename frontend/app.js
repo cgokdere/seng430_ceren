@@ -1218,63 +1218,79 @@ function updatePatientExplanationDynamic() {
 document.getElementById('explainPatientBtn')?.addEventListener('click', updatePatientExplanation);
 
 // ── DOWNLOAD SUMMARY CERTIFICATE ───────────────────────────────────
-function openDownloadSummary() {
+async function openDownloadSummary() {
   const domain = document.getElementById('domainLabel')?.textContent || 'Cardiology';
   const checklist = document.querySelectorAll('#euChecklist .check-item');
   const checked = [...checklist].filter(el => el.classList.contains('checked')).length;
   const total = Math.max(checklist.length, 1);
+  const checklistItems = [...checklist].map(el => ({
+    text: el.querySelector('.check-text b')?.textContent || '',
+    checked: el.classList.contains('checked')
+  }));
+  
   const compareRows = document.querySelectorAll('#compareBody tr:not([style*="display: none"])');
-  const compareRowsHtml = compareRows.length
-    ? [...compareRows].map(tr => {
-      const cells = tr.querySelectorAll('td');
-      if (cells.length >= 5) return '<tr><td>' + [0, 1, 2, 3, 4].map(i => (cells[i]?.innerText || '').replace(/</g, '&lt;')).join('</td><td>') + '</td></tr>';
-      return '';
-    }).filter(Boolean).join('')
-    : '<tr><td colspan="5">No models trained yet. Complete Step 4 to compare models.</td></tr>';
-  const completionNote = (typeof currentStep !== 'undefined' && currentStep >= 7) ? '<p style="color:#0D7A50;font-weight:600;margin-bottom:16px;">✓ All 7 steps completed. This summary is ready for clinical review.</p>' : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Health-AI Summary Certificate</title>
-<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:28px;color:#1a1a1a;line-height:1.65}
-h1{color:#1A6B9A;border-bottom:2px solid #0E9E8E;padding-bottom:10px;margin-bottom:8px}
-.section{margin:28px 0}
-.section h2{font-size:1.1em;color:#0D2340;margin-bottom:12px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{border:1px solid #ddd;padding:12px;text-align:left}
-th{background:#E8F4FA;font-weight:600}
-.tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;margin-right:6px}
-.tag-ok{background:#E8F7F0;color:#0D7A50}
-.tag-pending{background:#FEF3E2;color:#A05C00}
-.footer{margin-top:36px;padding-top:20px;font-size:12px;color:#666;border-top:1px solid #eee}
-</style></head><body>
-<h1>Health-AI Summary Certificate</h1>
-<p style="color:#666;font-size:14px;">Generated on ${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</p>
-${completionNote}
-<div class="section"><h2>Clinical Domain</h2><p>${(domain + '').replace(/</g, '&lt;')}</p></div>
-<div class="section"><h2>7-Step Pipeline Completed</h2>
-<ul><li>Step 1: Define Clinical Problem</li><li>Step 2: Upload &amp; Explore Data</li><li>Step 3: Prepare Data</li>
-<li>Step 4: Model Selection &amp; Parameter Tuning</li><li>Step 5: Results Evaluation</li><li>Step 6: Explainability</li>
-<li>Step 7: Ethics &amp; Bias</li></ul></div>
-<div class="section"><h2>EU AI Act Compliance Checklist</h2><p>${checked} of ${total} items completed.</p>
-<ul>${[...checklist].map(el => {
-    const txt = (el.querySelector('.check-text b')?.textContent || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const ok = el.classList.contains('checked');
-    return '<li><span class="tag ' + (ok ? 'tag-ok' : 'tag-pending') + '">' + (ok ? '✓' : '○') + '</span> ' + txt + '</li>';
-  }).join('')}</ul></div>
-<div class="section"><h2>Model Comparison</h2>
-<table><thead><tr><th>Model</th><th>Accuracy</th><th>Sensitivity</th><th>Specificity</th><th>AUC</th></tr></thead>
-<tbody>${compareRowsHtml}</tbody></table></div>
-<div class="footer">This certificate documents your completion of the Health-AI ML Learning Tool pipeline. For educational purposes. Not for clinical decision-making without qualified professional review.</div>
-</body></html>`;
-  var w = window.open('', '_blank');
-  if (w && !w.closed) {
-    w.document.write(html);
-    w.document.close();
-  } else {
-    var blob = new Blob([html], { type: 'text/html' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'HealthAI-Summary-Certificate.html';
+  const models = [];
+  compareRows.forEach(tr => {
+    if (tr.id === 'emptyCompareRow') return;
+    const cells = tr.querySelectorAll('td');
+    if (cells.length >= 5) {
+      models.push({
+        name: cells[0]?.innerText || 'Unknown Model',
+        accuracy: cells[1]?.innerText || '0%',
+        sensitivity: cells[2]?.innerText || '0%',
+        specificity: cells[3]?.innerText || '0%',
+        precision: tr.dataset.precision || '0%',
+        f1: tr.dataset.f1 || '0%',
+        auc: cells[4]?.innerText || '0'
+      });
+    }
+  });
+
+  const biasBannerText = document.querySelector('#step-7 .card .banner.bad div:nth-child(2)')?.textContent || '';
+
+  const payload = {
+    domain: domain,
+    checklist_total: total,
+    checklist_checked: checked,
+    checklist_items: checklistItems,
+    models: models,
+    bias_findings: biasBannerText
+  };
+
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+  const apiBase = isLocal ? 'http://127.0.0.1:8000' : 'https://healthai-juniorengineers-1.onrender.com';
+
+  const downloadBtn1 = document.getElementById('downloadSummaryBtn');
+  const downloadBtn2 = document.getElementById('downloadSummaryBtnFooter');
+  if (downloadBtn1) { downloadBtn1.disabled = true; downloadBtn1.textContent = 'Generating PDF...'; }
+  if (downloadBtn2) { downloadBtn2.disabled = true; downloadBtn2.textContent = 'Generating PDF...'; }
+
+  try {
+    const res = await fetch(apiBase + '/api/generate-certificate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      throw new Error(`API Error: ${res.statusText}`);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'HealthAI-Summary-Certificate.pdf';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error(err);
+    alert('Failed to generate PDF certificate: ' + err.message);
+  } finally {
+    if (downloadBtn1) { downloadBtn1.disabled = false; downloadBtn1.textContent = '📄 Download Summary Certificate'; }
+    if (downloadBtn2) { downloadBtn2.disabled = false; downloadBtn2.textContent = '📄 Download Summary Certificate'; }
   }
 }
 document.getElementById('downloadSummaryBtn')?.addEventListener('click', openDownloadSummary);

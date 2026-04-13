@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
+from datetime import datetime
 import os
 import pandas as pd
 import numpy as np
@@ -503,6 +504,119 @@ async def train_model(req: TrainingRequest):
             "tp": int(tp),
             "roc_points": roc_points
         }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ChecklistItem(BaseModel):
+    text: str
+    checked: bool
+
+class ModelMetrics(BaseModel):
+    name: str
+    accuracy: str
+    sensitivity: str
+    specificity: str
+    precision: str
+    f1: str
+    auc: str
+
+class CertificateRequest(BaseModel):
+    domain: str
+    checklist_total: int
+    checklist_checked: int
+    checklist_items: List[ChecklistItem]
+    models: List[ModelMetrics]
+    bias_findings: str
+
+@app.post("/api/generate-certificate")
+async def generate_certificate(req: CertificateRequest):
+    try:
+        from fpdf import FPDF
+        
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        
+        pdf.set_font("Helvetica", 'B', 16)
+        pdf.set_text_color(26, 107, 154)
+        pdf.cell(0, 10, "Health-AI Summary Certificate", ln=True, align="C")
+        
+        pdf.set_font("Helvetica", '', 10)
+        pdf.set_text_color(100, 100, 100)
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pdf.cell(0, 5, f"Generated on {date_str}", ln=True, align="C")
+        pdf.ln(10)
+        
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.set_text_color(13, 35, 64)
+        pdf.cell(0, 8, "Clinical Domain", ln=True)
+        pdf.set_font("Helvetica", '', 11)
+        pdf.set_text_color(30, 30, 30)
+        pdf.multi_cell(0, 6, req.domain, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.set_text_color(13, 35, 64)
+        pdf.cell(0, 8, f"EU AI Act Compliance Checklist ({req.checklist_checked} of {req.checklist_total} completed)", ln=True)
+        pdf.set_font("Helvetica", '', 10)
+        pdf.set_text_color(30, 30, 30)
+        for item in req.checklist_items:
+            status = "[ X ]" if item.checked else "[   ]"
+            # Convert text for fpdf2
+            text = item.text.encode('latin-1', 'replace').decode('latin-1')
+            pdf.multi_cell(0, 6, f"{status} {text}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.set_text_color(13, 35, 64)
+        pdf.cell(0, 8, "Ethics & Bias Findings", ln=True)
+        pdf.set_font("Helvetica", '', 11)
+        pdf.set_text_color(30, 30, 30)
+        bias_text = req.bias_findings if req.bias_findings else "No bias analysis provided."
+        bias_text = bias_text.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 6, bias_text, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.set_text_color(13, 35, 64)
+        pdf.cell(0, 8, "Model Comparison", ln=True)
+        
+        pdf.set_font("Helvetica", 'B', 9)
+        pdf.set_fill_color(232, 244, 250)
+        
+        col_w = [45, 23, 23, 23, 23, 23, 23]
+        headers = ["Model", "Accuracy", "Sens.", "Spec.", "Prec.", "F1", "AUC"]
+        for i, h in enumerate(headers):
+            pdf.cell(col_w[i], 8, h, border=1, fill=True)
+        pdf.ln()
+        
+        pdf.set_font("Helvetica", '', 9)
+        if not req.models:
+            pdf.cell(sum(col_w), 8, "No models trained yet.", border=1, align="C")
+            pdf.ln()
+        else:
+            for m in req.models:
+                pdf.cell(col_w[0], 8, m.name.encode('latin-1', 'replace').decode('latin-1'), border=1)
+                pdf.cell(col_w[1], 8, m.accuracy, border=1)
+                pdf.cell(col_w[2], 8, m.sensitivity, border=1)
+                pdf.cell(col_w[3], 8, m.specificity, border=1)
+                pdf.cell(col_w[4], 8, m.precision, border=1)
+                pdf.cell(col_w[5], 8, m.f1, border=1)
+                pdf.cell(col_w[6], 8, m.auc, border=1)
+                pdf.ln()
+        
+        pdf.ln(10)
+        pdf.set_font("Helvetica", 'I', 8)
+        pdf.set_text_color(100, 100, 100)
+        footer_text = "This certificate documents your completion of the Health-AI ML Learning Tool pipeline. For educational purposes. Not for clinical decision-making without qualified professional review."
+        pdf.multi_cell(0, 4, footer_text, new_x="LMARGIN", new_y="NEXT")
+        
+        return Response(content=bytes(pdf.output()), media_type="application/pdf", headers={
+            "Content-Disposition": "attachment; filename=HealthAI-Summary-Certificate.pdf"
+        })
         
     except Exception as e:
         import traceback
