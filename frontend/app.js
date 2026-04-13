@@ -6,6 +6,76 @@ const steps = [...document.querySelectorAll('.step-btn')];
 const screens = [...document.querySelectorAll('.screen')];
 
 var stepNames = { 1: 'Clinical Context', 2: 'Data Exploration', 3: 'Data Preparation', 4: 'Model & Parameters', 5: 'Results', 6: 'Explainability', 7: 'Ethics & Bias' };
+
+// ── GLOBAL POPUP (used for navigation / blocking errors) ──────────
+function ensureGlobalPopup() {
+  if (document.getElementById('globalPopupOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'globalPopupOverlay';
+  overlay.className = 'global-popup-overlay';
+  overlay.innerHTML = `
+    <div class="global-popup-box" role="dialog" aria-modal="true" aria-labelledby="globalPopupTitle" aria-describedby="globalPopupMessage">
+      <button class="global-popup-close" type="button" aria-label="Close">✕</button>
+      <div class="global-popup-top">
+        <div class="global-popup-icon warn" id="globalPopupIcon" aria-hidden="true">!</div>
+        <div style="min-width:0;">
+          <div class="global-popup-title" id="globalPopupTitle">Action required</div>
+          <div class="global-popup-message" id="globalPopupMessage"></div>
+        </div>
+      </div>
+      <div class="global-popup-actions">
+        <button class="btn primary" type="button" id="globalPopupOk">OK</button>
+      </div>
+    </div>
+  `.trim();
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeGlobalPopup();
+  });
+  overlay.querySelector('.global-popup-close')?.addEventListener('click', closeGlobalPopup);
+  overlay.querySelector('#globalPopupOk')?.addEventListener('click', closeGlobalPopup);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeGlobalPopup();
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function closeGlobalPopup() {
+  const overlay = document.getElementById('globalPopupOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+}
+
+function showGlobalPopup(opts) {
+  ensureGlobalPopup();
+  const overlay = document.getElementById('globalPopupOverlay');
+  if (!overlay) return;
+  const boxEl = overlay.querySelector('.global-popup-box');
+  const titleEl = overlay.querySelector('#globalPopupTitle');
+  const msgEl = overlay.querySelector('#globalPopupMessage');
+  const iconEl = overlay.querySelector('#globalPopupIcon');
+
+  const title = (opts && opts.title) ? String(opts.title) : 'Action required';
+  const message = (opts && opts.message) ? String(opts.message) : '';
+  const variant = (opts && opts.variant) ? String(opts.variant) : 'warn'; // warn | bad | info
+
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+  if (iconEl) {
+    iconEl.className = `global-popup-icon ${variant}`;
+    iconEl.textContent = variant === 'info' ? 'i' : '!';
+  }
+  if (boxEl) {
+    boxEl.classList.toggle('global-popup-centered', variant === 'bad');
+  }
+
+  overlay.classList.add('open');
+
+  // focus OK for keyboard users
+  setTimeout(() => overlay.querySelector('#globalPopupOk')?.focus(), 0);
+}
 function showStep(n) {
   currentStep = n;
   steps.forEach(s => {
@@ -79,23 +149,27 @@ function gate(n) {
 
   if (n >= 3 && !schemaOK) {
     showStep(2);
-    var sb = document.getElementById('schemaBanner');
-    if (sb) {
-      sb.className = 'banner bad';
-      sb.innerHTML = '<div class="banner-icon">🚫</div><div><b>Action required:</b> You must open the Column Mapper, validate the schema, and save before continuing to Step 3.</div>';
-    }
+    // Hide inline banners and show a consistent popup instead
+    const sb = document.getElementById('schemaBanner');
+    if (sb) sb.style.display = 'none';
+    showGlobalPopup({
+      title: 'Action required',
+      message: 'You must open the Column Mapper, validate the schema, and save before continuing to Step 3.',
+      variant: 'bad',
+    });
     return true;
   }
 
   // Step 3 to 4 lock
   if (n >= 4 && typeof window.step3Complete !== 'undefined' && !window.step3Complete) {
     showStep(3);
-    var reqReadyBanner = document.getElementById('step3ReadyBanner');
-    if (reqReadyBanner) {
-      reqReadyBanner.style.display = 'flex';
-      reqReadyBanner.className = 'banner bad';
-      reqReadyBanner.innerHTML = '<div class="banner-icon">🚫</div><div><b>Action required:</b> You must click "Apply Preparation Settings" to process your data before continuing to Step 4.</div>';
-    }
+    const reqReadyBanner = document.getElementById('step3ReadyBanner');
+    if (reqReadyBanner) reqReadyBanner.style.display = 'none';
+    showGlobalPopup({
+      title: 'Action required',
+      message: 'You must click "Apply Preparation Settings" to process your data before continuing to Step 4.',
+      variant: 'bad',
+    });
     return true;
   }
 
@@ -104,12 +178,13 @@ function gate(n) {
     const emptyRow = document.getElementById('emptyCompareRow');
     if (emptyRow && emptyRow.parentNode) {
       showStep(4);
-      var step4Banner = document.getElementById('step4ReadyBanner');
-      if (step4Banner) {
-        step4Banner.style.display = 'flex';
-      } else {
-        alert("Action required: You must train at least one model in Step 4 before viewing the results in Step 5.");
-      }
+      const step4Banner = document.getElementById('step4ReadyBanner');
+      if (step4Banner) step4Banner.style.display = 'none';
+      showGlobalPopup({
+        title: 'Action required',
+        message: 'You must train at least one model in Step 4 before viewing the results in Step 5.',
+        variant: 'bad',
+      });
       return true;
     }
   }
@@ -887,7 +962,11 @@ async function doRealTraining(activeModel) {
   } catch (e) { }
 
   if (!prepData || !prepData.trainRows || prepData.trainRows.length === 0) {
-    alert("No preprocessed data found. Please complete Step 2 (Data Loading) and Step 3 (Preparation) first.");
+    showGlobalPopup({
+      title: 'Action required',
+      message: 'No preprocessed data found. Please complete Step 2 (Data Loading) and Step 3 (Preparation) first.',
+      variant: 'bad',
+    });
     return;
   }
 
@@ -951,7 +1030,11 @@ async function doRealTraining(activeModel) {
 
   } catch (e) {
     console.error(e);
-    alert("Failed to train model. Is the Python backend running?\n\n" + e.message);
+    showGlobalPopup({
+      title: 'Training failed',
+      message: "Failed to train model. Is the Python backend running?\n\n" + (e && e.message ? e.message : String(e)),
+      variant: 'bad',
+    });
     ts.style.display = 'none';
   } finally {
     if (trainBtn) trainBtn.disabled = false;
@@ -1287,7 +1370,11 @@ async function openDownloadSummary() {
     URL.revokeObjectURL(url);
   } catch (err) {
     console.error(err);
-    alert('Failed to generate PDF certificate: ' + err.message);
+    showGlobalPopup({
+      title: 'Download failed',
+      message: 'Failed to generate PDF certificate: ' + (err && err.message ? err.message : String(err)),
+      variant: 'bad',
+    });
   } finally {
     if (downloadBtn1) { downloadBtn1.disabled = false; downloadBtn1.textContent = '📄 Download Summary Certificate'; }
     if (downloadBtn2) { downloadBtn2.disabled = false; downloadBtn2.textContent = '📄 Download Summary Certificate'; }
@@ -2116,8 +2203,15 @@ function renderStep7Ethics() {
       let spec = Math.floor(Math.random() * 15 + 75);
 
       let sensCls = sens >= 60 ? 'good' : (sens >= 50 ? 'warn' : 'bad');
-      let fairnessTag = sens >= 60 ? '<span class="tag good">OK</span>' :
-        (sens >= 50 ? '<span class="tag warn">Review</span>' : '<span class="tag bad">⚠ Review Needed</span>');
+      let fairnessTag;
+      if (sens >= 60) {
+        fairnessTag = '<span class="tag good">OK</span>';
+      } else if (sens >= 50) {
+        const tip = 'Sensitivity is moderate for this subgroup (50–59%). Review calibration, thresholds, and data representation for this group before relying on predictions clinically.';
+        fairnessTag = `<span class="tag warn">Review</span><span class="hover-help" role="note" tabindex="0" aria-label="Why review?" data-tooltip="${tip}">i</span>`;
+      } else {
+        fairnessTag = '<span class="tag bad">⚠ Review Needed</span>';
+      }
 
       return { acc: acc, sens: sens, spec: spec, sensCls, fairnessTag, isBad: sens < 50 };
     };
@@ -2212,8 +2306,10 @@ function renderStep7Ethics() {
           else subgroupCard.appendChild(bannerContainer);
         }
 
-        if (hasBias && biasedGroups.length > 0) {
-          bannerContainer.innerHTML = biasedGroups.map(g => {
+        // Only show banners for "bad" cases. "Review" (warn) uses inline hover tooltip instead.
+        const bannerGroups = biasedGroups.filter(g => g.isBad);
+        if (hasBias && bannerGroups.length > 0) {
+          bannerContainer.innerHTML = bannerGroups.map(g => {
             let ppDiff = overallSens - g.sens;
             if (ppDiff <= 10) ppDiff = maxSens - g.sens;
 

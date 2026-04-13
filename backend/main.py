@@ -522,6 +522,8 @@ class ModelMetrics(BaseModel):
     precision: str
     f1: str
     auc: str
+    # Optional for future: negative predictive value
+    npv: Optional[str] = None
 
 class CertificateRequest(BaseModel):
     domain: str
@@ -535,21 +537,22 @@ class CertificateRequest(BaseModel):
 async def generate_certificate(req: CertificateRequest):
     try:
         from fpdf import FPDF
-        
+
+        # Revert to the original simple certificate layout (content unchanged)
         pdf = FPDF()
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
-        
+
         pdf.set_font("Helvetica", 'B', 16)
         pdf.set_text_color(26, 107, 154)
         pdf.cell(0, 10, "Health-AI Summary Certificate", ln=True, align="C")
-        
+
         pdf.set_font("Helvetica", '', 10)
         pdf.set_text_color(100, 100, 100)
         date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         pdf.cell(0, 5, f"Generated on {date_str}", ln=True, align="C")
         pdf.ln(10)
-        
+
         pdf.set_font("Helvetica", 'B', 12)
         pdf.set_text_color(13, 35, 64)
         pdf.cell(0, 8, "Clinical Domain", ln=True)
@@ -557,7 +560,7 @@ async def generate_certificate(req: CertificateRequest):
         pdf.set_text_color(30, 30, 30)
         pdf.multi_cell(0, 6, req.domain, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(5)
-        
+
         pdf.set_font("Helvetica", 'B', 12)
         pdf.set_text_color(13, 35, 64)
         pdf.cell(0, 8, f"EU AI Act Compliance Checklist ({req.checklist_checked} of {req.checklist_total} completed)", ln=True)
@@ -565,11 +568,10 @@ async def generate_certificate(req: CertificateRequest):
         pdf.set_text_color(30, 30, 30)
         for item in req.checklist_items:
             status = "[ X ]" if item.checked else "[   ]"
-            # Convert text for fpdf2
-            text = item.text.encode('latin-1', 'replace').decode('latin-1')
+            text = (item.text or "").encode('latin-1', 'replace').decode('latin-1')
             pdf.multi_cell(0, 6, f"{status} {text}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(5)
-        
+
         pdf.set_font("Helvetica", 'B', 12)
         pdf.set_text_color(13, 35, 64)
         pdf.cell(0, 8, "Ethics & Bias Findings", ln=True)
@@ -579,35 +581,38 @@ async def generate_certificate(req: CertificateRequest):
         bias_text = bias_text.encode('latin-1', 'replace').decode('latin-1')
         pdf.multi_cell(0, 6, bias_text, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(5)
-        
+
         pdf.set_font("Helvetica", 'B', 12)
         pdf.set_text_color(13, 35, 64)
         pdf.cell(0, 8, "Model Comparison", ln=True)
-        
+
         pdf.set_font("Helvetica", 'B', 9)
         pdf.set_fill_color(232, 244, 250)
-        
+
         col_w = [45, 23, 23, 23, 23, 23, 23]
-        headers = ["Model", "Accuracy", "Sens.", "Spec.", "Prec.", "F1", "AUC"]
+        headers = ["Model", "Accuracy", "Sensitivity", "Specificity", "PPV", "NPV", "AUC"]
         for i, h in enumerate(headers):
             pdf.cell(col_w[i], 8, h, border=1, fill=True)
         pdf.ln()
-        
+
         pdf.set_font("Helvetica", '', 9)
         if not req.models:
             pdf.cell(sum(col_w), 8, "No models trained yet.", border=1, align="C")
             pdf.ln()
         else:
             for m in req.models:
-                pdf.cell(col_w[0], 8, m.name.encode('latin-1', 'replace').decode('latin-1'), border=1)
+                pdf.cell(col_w[0], 8, (m.name or "").encode('latin-1', 'replace').decode('latin-1'), border=1)
                 pdf.cell(col_w[1], 8, m.accuracy, border=1)
                 pdf.cell(col_w[2], 8, m.sensitivity, border=1)
                 pdf.cell(col_w[3], 8, m.specificity, border=1)
+                # PPV == Precision
                 pdf.cell(col_w[4], 8, m.precision, border=1)
-                pdf.cell(col_w[5], 8, m.f1, border=1)
+                # NPV is not currently provided by frontend payload
+                # Use ASCII placeholder to avoid Helvetica encoding errors
+                pdf.cell(col_w[5], 8, (m.npv or "N/A"), border=1)
                 pdf.cell(col_w[6], 8, m.auc, border=1)
                 pdf.ln()
-        
+
         pdf.ln(10)
         pdf.set_font("Helvetica", 'I', 8)
         pdf.set_text_color(100, 100, 100)
