@@ -4,13 +4,14 @@ from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from datetime import datetime
 import os
+import re
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
@@ -18,6 +19,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score, recall_score, roc_auc_score, confusion_matrix, precision_score, f1_score, roc_curve
+from sklearn.inspection import permutation_importance
+
+try:
+    import shap
+except ImportError:
+    shap = None  # type: ignore
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
@@ -77,6 +84,384 @@ class TrainingRequest(BaseModel):
     targetColumn: str
     modelType: str
     params: Dict[str, Any]
+
+
+def _encoded_column_to_original(encoded_col: str, orig_features: List[str], cat_cols: List[str]) -> str:
+    """Maps one-hot / numeric column name back to a logical feature from preparation."""
+    if encoded_col in orig_features:
+        return encoded_col
+    cat_set = set(cat_cols)
+    for f in orig_features:
+        prefix = f + "_"
+        if encoded_col.startswith(prefix):
+            return f
+    for f in orig_features:
+        if encoded_col.startswith(f + "_"):
+            return f
+    return encoded_col
+
+
+def _build_orig_column_map(encoded_cols: List[str], orig_features: List[str], cat_cols: List[str]) -> List[str]:
+    return [_encoded_column_to_original(c, orig_features, cat_cols) for c in encoded_cols]
+
+
+def _aggregate_rows_by_orig(
+    values_per_encoded: np.ndarray,
+    orig_per_col: List[str],
+    orig_features: List[str],
+) -> np.ndarray:
+    """Sum columns that belong to the same original feature (e.g. one-hot groups)."""
+    idx = {f: i for i, f in enumerate(orig_features)}
+    out = np.zeros((values_per_encoded.shape[0], len(orig_features)))
+    for j, ocol in enumerate(orig_per_col):
+        if ocol not in idx:
+            continue
+        out[:, idx[ocol]] += values_per_encoded[:, j]
+    return out
+
+
+def _marginal_risk_contributions(
+    model,
+    X_test_np: np.ndarray,
+    X_train_np: np.ndarray,
+    pos_idx: int,
+) -> np.ndarray:
+    """
+    Per encoded column: (p(x) - p(x with feature j replaced by train median)).
+    Positive => this feature's observed value increases positive-class probability vs median reference.
+    """
+    n_test, n_feat = X_test_np.shape
+    med = np.median(X_train_np, axis=0)
+    base = model.predict_proba(X_test_np)[:, pos_idx].astype(np.float64)
+    out = np.zeros((n_test, n_feat), dtype=np.float64)
+    for j in range(n_feat):
+        Xm = X_test_np.copy()
+        Xm[:, j] = med[j]
+        out[:, j] = base - model.predict_proba(Xm)[:, pos_idx].astype(np.float64)
+    return out
+
+
+def _shap_matrix_or_marginal(
+    model,
+    m_type: str,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    pos_idx: int,
+    X_train_np: np.ndarray,
+    X_test_np: np.ndarray,
+) -> np.ndarray:
+    """SHAP for tree / linear; otherwise marginal effect vs median (aligned with model predictions)."""
+    if shap is not None:
+        try:
+            if m_type in ("rf", "dt"):
+                explainer = shap.TreeExplainer(model)
+                sv = explainer.shap_values(X_test)
+            elif m_type == "lr":
+                explainer = shap.LinearExplainer(model, X_train)
+                sv = explainer.shap_values(X_test)
+            else:
+                sv = None
+            if sv is not None:
+                if isinstance(sv, list):
+                    sv = np.asarray(sv[pos_idx])
+                else:
+                    sv = np.asarray(sv)
+                    if sv.ndim == 3:
+                        sv = sv[:, :, pos_idx]
+                return sv.astype(np.float64)
+        except Exception:
+            pass
+    return _marginal_risk_contributions(model, X_test_np, X_train_np, pos_idx)
+
+
+def _global_importance_permutation(
+    model,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    orig_per_col: List[str],
+    orig_features: List[str],
+) -> Dict[str, float]:
+    """Model-agnostic global importance; aggregated to original feature names."""
+    try:
+        pi = permutation_importance(
+            model,
+            X_test,
+            y_test,
+            n_repeats=8,
+            random_state=42,
+            scoring="roc_auc",
+        )
+        imp_enc = np.asarray(pi.importances_mean)
+    except Exception:
+        return {}
+    agg: Dict[str, float] = {f: 0.0 for f in orig_features}
+    for j, ocol in enumerate(orig_per_col):
+        if ocol in agg and j < len(imp_enc):
+            agg[ocol] += max(0.0, float(imp_enc[j]))
+    return agg
+
+
+def _build_explainability(
+    model,
+    m_type: str,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    y_pred: np.ndarray,
+    df_test_raw: pd.DataFrame,
+    orig_features: List[str],
+    cat_cols: List[str],
+    pos_idx: int,
+    pos_label: Any,
+    max_test_rows: int = 36,
+) -> Dict[str, Any]:
+    encoded_cols = list(X_train.columns)
+    orig_per_col = _build_orig_column_map(encoded_cols, orig_features, cat_cols)
+    X_train_np = X_train.to_numpy(dtype=np.float64)
+    X_test_np = X_test.to_numpy(dtype=np.float64)
+
+    local_enc = _shap_matrix_or_marginal(
+        model, m_type, X_train, X_test, pos_idx, X_train_np, X_test_np
+    )
+    local_enc = np.nan_to_num(local_enc, nan=0.0, posinf=0.0, neginf=0.0)
+    local_orig = _aggregate_rows_by_orig(local_enc, orig_per_col, orig_features)
+
+    glob_from_local = np.mean(np.abs(local_orig), axis=0)
+    global_dict = {orig_features[i]: float(glob_from_local[i]) for i in range(len(orig_features))}
+    perm_agg = _global_importance_permutation(model, X_test, y_test, orig_per_col, orig_features)
+    if perm_agg:
+        mx = max(global_dict.values()) if global_dict.values() else 1.0
+        mx = mx if mx > 1e-12 else 1.0
+        for f in orig_features:
+            global_dict[f] = 0.6 * global_dict[f] + 0.4 * ((perm_agg.get(f, 0.0) / (max(perm_agg.values()) or 1.0)) * mx)
+
+    fi_sorted = sorted(
+        [{"feature": f, "importance": float(global_dict.get(f, 0.0))} for f in orig_features],
+        key=lambda x: x["importance"],
+        reverse=True,
+    )
+
+    n_test = len(X_test)
+    n_take = min(max_test_rows, n_test)
+    if hasattr(model, "predict_proba"):
+        probs = model.predict_proba(X_test)[:n_take, pos_idx]
+    else:
+        probs = np.zeros(n_take)
+
+    test_explanations: List[Dict[str, Any]] = []
+    for i in range(n_take):
+        row_vals = local_orig[i]
+        order = np.argsort(-np.abs(row_vals))
+        top_k = order[: min(10, len(order))]
+        contributions: List[Dict[str, Any]] = []
+        for j in top_k:
+            fname = orig_features[int(j)]
+            impact = float(row_vals[int(j)])
+            raw_v = df_test_raw.iloc[i][fname] if fname in df_test_raw.columns else None
+            if raw_v is not None and not (isinstance(raw_v, float) and np.isnan(raw_v)):
+                disp = raw_v
+            else:
+                disp = ""
+            direction = "increase_risk" if impact >= 0 else "decrease_risk"
+            contributions.append(
+                {
+                    "feature": fname,
+                    "value": disp,
+                    "impact": impact,
+                    "direction": direction,
+                }
+            )
+        pl = float(probs[i])
+        test_explanations.append(
+            {
+                "patient_index": i + 1,
+                "prob_positive": round(pl * 100, 1),
+                "prob_positive_raw": pl,
+                "actual_label": str(y_test.iloc[i]),
+                "predicted_label": str(y_pred[i]),
+                "contributions": contributions,
+            }
+        )
+
+    return {
+        "feature_importance": fi_sorted,
+        "test_explanations": test_explanations,
+        "positive_class": str(pos_label),
+    }
+
+
+def _detect_gender_column_fairness(df: pd.DataFrame) -> Optional[str]:
+    for c in df.columns:
+        cl = str(c).lower().strip()
+        if "gender" in cl or cl == "sex" or cl.startswith("sex"):
+            return c
+    return None
+
+
+def _detect_age_column_fairness(df: pd.DataFrame) -> Optional[str]:
+    """Pre-scaled years (Age_raw) when Age was a normalized model feature; else raw Age."""
+    cols = list(df.columns)
+    for c in cols:
+        if _norm_col_name(str(c)).lower() == "age_raw":
+            return c
+    for c in cols:
+        cl = str(c).lower()
+        if cl.endswith("_raw"):
+            base = re.sub(r"_raw$", "", str(c), flags=re.IGNORECASE)
+            if _is_demographic_fairness_col(base):
+                return c
+    for c in cols:
+        if _norm_col_name(str(c)).lower() == "age":
+            return c
+    for c in cols:
+        cl = _norm_col_name(str(c)).lower()
+        if cl in ("patient_age", "age_years", "age_year"):
+            return c
+        if re.match(r"^age_\w+$", cl) or re.match(r"^\w+_age$", cl):
+            if "image" in cl or "band" in cl:
+                continue
+            return c
+    return None
+
+
+def _parse_age_val(val: Any) -> Optional[float]:
+    try:
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            return None
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _gender_display_label(val: Any) -> str:
+    s = str(val).strip().lower()
+    if s in ("f", "female", "woman", "1", "true"):
+        return "Female"
+    if s in ("m", "male", "man", "0", "false"):
+        return "Male"
+    return str(val).strip()[:48]
+
+
+def _subgroup_metrics_cm(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    pos_label: Any,
+    labels: np.ndarray,
+) -> Optional[Dict[str, float]]:
+    n = len(y_true)
+    if n == 0:
+        return None
+    acc = float(accuracy_score(y_true, y_pred))
+    if n < 2:
+        return {"n": n, "accuracy": acc, "sensitivity": 0.0, "specificity": 0.0}
+    ul = np.unique(np.concatenate([y_true, y_pred]))
+    if len(ul) < 2:
+        return {"n": n, "accuracy": acc, "sensitivity": 0.0, "specificity": 0.0}
+    try:
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        if cm.shape == (2, 2):
+            lbl_arr = np.asarray(labels).ravel()
+            pos_i = 0
+            for i, lb in enumerate(lbl_arr):
+                if lb == pos_label or str(lb) == str(pos_label):
+                    pos_i = i
+                    break
+            neg_i = 1 - pos_i
+            tp = float(cm[pos_i, pos_i])
+            fn = float(cm[pos_i, neg_i])
+            fp = float(cm[neg_i, pos_i])
+            tn = float(cm[neg_i, neg_i])
+            sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+        else:
+            sens = float(recall_score(y_true, y_pred, pos_label=pos_label, zero_division=0))
+            spec = 0.0
+    except Exception:
+        sens = float(recall_score(y_true, y_pred, pos_label=pos_label, zero_division=0))
+        spec = 0.0
+    return {"n": n, "accuracy": acc, "sensitivity": sens, "specificity": spec}
+
+
+def _compute_fairness_subgroups(
+    df_test: pd.DataFrame,
+    y_test: pd.Series,
+    y_pred: np.ndarray,
+    pos_label: Any,
+    labels: np.ndarray,
+) -> Dict[str, Any]:
+    """
+    Test-set subgroup metrics (gender levels + age buckets) using the same predictions as overall test evaluation.
+    """
+    y_true_a = np.asarray(y_test.values)
+    y_pred_a = np.asarray(y_pred).ravel()
+    if len(y_true_a) != len(y_pred_a):
+        return {"subgroups": [], "sensitivity_max_gap_pp": 0.0, "bias_warning": False, "min_subgroup_n": 5}
+
+    subgroups: List[Dict[str, Any]] = []
+
+    gcol = _detect_gender_column_fairness(df_test)
+    if gcol and gcol in df_test.columns:
+        uniq = pd.Series(df_test[gcol]).dropna().unique().tolist()
+        if len(uniq) > 8:
+            uniq = uniq[:8]
+        for v in uniq:
+            mask = pd.Series(df_test[gcol]).eq(v).to_numpy()
+            if mask.sum() == 0:
+                continue
+            m = _subgroup_metrics_cm(y_true_a[mask], y_pred_a[mask], pos_label, labels)
+            if m is None:
+                continue
+            subgroups.append(
+                {
+                    "label": f"Sex: {_gender_display_label(v)}",
+                    "n": int(m["n"]),
+                    "accuracy": m["accuracy"],
+                    "sensitivity": m["sensitivity"],
+                    "specificity": m["specificity"],
+                }
+            )
+
+    acol = _detect_age_column_fairness(df_test)
+    if acol and acol in df_test.columns:
+        ages = df_test[acol].map(_parse_age_val)
+        bucket_defs = [
+            ("Age 18–60", lambda a: a.notna() & (a >= 18) & (a <= 60)),
+            ("Age 61–75", lambda a: a.notna() & (a >= 61) & (a <= 75)),
+            ("Age 76+", lambda a: a.notna() & (a >= 76)),
+        ]
+        for bname, pred in bucket_defs:
+            mask = np.asarray(pred(ages))
+            if mask.sum() == 0:
+                continue
+            m = _subgroup_metrics_cm(y_true_a[mask], y_pred_a[mask], pos_label, labels)
+            if m is None:
+                continue
+            subgroups.append(
+                {
+                    "label": bname,
+                    "n": int(m["n"]),
+                    "accuracy": m["accuracy"],
+                    "sensitivity": m["sensitivity"],
+                    "specificity": m["specificity"],
+                }
+            )
+
+    min_n = 5
+    valid = [s for s in subgroups if s["n"] >= min_n]
+    gap_pp = 0.0
+    bias_warning = False
+    if len(valid) >= 2:
+        sens_vals = [float(s["sensitivity"]) for s in valid]
+        gap_pp = (max(sens_vals) - min(sens_vals)) * 100.0
+        bias_warning = gap_pp > 10.0 + 1e-9
+
+    return {
+        "subgroups": subgroups,
+        "sensitivity_max_gap_pp": round(float(gap_pp), 1),
+        "bias_warning": bias_warning,
+        "min_subgroup_n": min_n,
+    }
+
 
 def get_stats(df, col_name, col_type):
     if col_type == 'numeric' and col_name in df.columns:
@@ -145,6 +530,26 @@ def _resolve_target_column(requested: str, df_columns: List[str]) -> Optional[st
         return low[req_n.lower()]
     return None
 
+
+def _is_demographic_fairness_col(name: str) -> bool:
+    """
+    Yaş / cinsiyet sütunlarını tanır (model özelliği olmasalar bile Step 7 fairness için saklanır).
+    'advantage', 'percentage' gibi yanlış pozitifleri engeller — 'age' alt dizesi kullanılmaz.
+    """
+    n = _norm_col_name(name).lower()
+    if n in ("age", "sex", "gender"):
+        return True
+    if "gender" in n:
+        return True
+    if n == "sex" or n.endswith("_sex") or n.startswith("sex_"):
+        return True
+    if n in ("patient_age", "age_years", "age_year"):
+        return True
+    if re.match(r"^age$", n) or re.match(r"^age_\w+$", n) or re.match(r"^\w+_age$", n):
+        return True
+    return False
+
+
 @app.post("/api/prepare")
 async def prepare_data(req: PrepareRequest):
     try:
@@ -186,7 +591,12 @@ async def prepare_data(req: PrepareRequest):
         # Aggregate numeric stats across all numeric feature values (global)
         before_stats["numeric_aggregate"] = get_aggregate_numeric_stats(df, num_cols)
 
-        keep_cols = feature_cols + [target_col]
+        keep_cols = list(dict.fromkeys(feature_cols + [target_col]))
+        fairness_extra = [
+            c for c in df.columns
+            if c not in keep_cols and _is_demographic_fairness_col(c)
+        ]
+        keep_cols = list(dict.fromkeys(keep_cols + fairness_extra))
         df = df[keep_cols]
         df = df.dropna(subset=[target_col])
 
@@ -215,6 +625,9 @@ async def prepare_data(req: PrepareRequest):
                 random_state=42
             )
 
+        dem_cols = [c for c in fairness_extra if c in df.columns]
+        df_test_dem = df.loc[X_test.index, dem_cols].copy() if dem_cols else None
+
         # --- Tüm-NaN kolon temizleme (düzeltilmiş mantık) ---
         num_cols_valid = [c for c in num_cols if X_train[c].notna().any()]
         cat_cols_valid = [c for c in cat_cols if X_train[c].notna().any()]
@@ -239,6 +652,8 @@ async def prepare_data(req: PrepareRequest):
             test_mask = X_test.notna().all(axis=1)
             X_test = X_test[test_mask]
             y_test = y_test[test_mask]
+            if df_test_dem is not None:
+                df_test_dem = df_test_dem.loc[X_test.index]
             dropped_train = train_before - len(X_train)
             dropped_test = test_before - len(X_test)
         else:
@@ -268,6 +683,16 @@ async def prepare_data(req: PrepareRequest):
                     X_train[col] = arr_train[:, i]
                     if arr_test is not None:
                         X_test[col] = arr_test[:, i]
+
+        # Fairness subgroup bucketing needs real years, not z-scores / min-max scaled values.
+        # Snapshot after imputation, before normalisation (still comparable across train/test).
+        fairness_raw_snapshots: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
+        for col in num_cols:
+            if _is_demographic_fairness_col(col) and col in X_test.columns:
+                fairness_raw_snapshots[col] = (
+                    np.array(X_train[col].values, copy=True),
+                    np.array(X_test[col].values, copy=True),
+                )
 
         # --- Normalisation ---
         if req.settings.normalisation != 'none' and num_cols:
@@ -345,6 +770,26 @@ async def prepare_data(req: PrepareRequest):
 
         test_df = X_test.copy()
         test_df[target_col] = np.array(y_test)
+        if df_test_dem is not None and not df_test_dem.empty:
+            for c in df_test_dem.columns:
+                test_df[c] = df_test_dem[c].values
+
+        for col, (tr_raw, te_raw) in fairness_raw_snapshots.items():
+            test_df[col + "_raw"] = te_raw
+
+        if not applied_smote and fairness_raw_snapshots:
+            for col, (tr_raw, te_raw) in fairness_raw_snapshots.items():
+                if len(tr_raw) == len(train_df):
+                    train_df[col + "_raw"] = tr_raw
+
+        if not applied_smote and dem_cols:
+            try:
+                train_dem = df.loc[X_train.index, dem_cols]
+                for c in train_dem.columns:
+                    if c not in train_df.columns:
+                        train_df[c] = train_dem[c].values
+            except Exception:
+                pass
 
         # FIX: "None" string yerine gerçek JSON null (None) kullan
         train_df = safe_json_serialize(train_df)
@@ -436,8 +881,11 @@ async def train_model(req: TrainingRequest):
             
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
-        
+        df_test_raw = pd.DataFrame(req.testRows)
+
         labels = np.unique(y_test)
+        explain_payload: Dict[str, Any] = {}
+        fairness_payload: Dict[str, Any] = {}
         if len(labels) >= 2:
             # Assume binary classification; intelligently select pos_label
             pos_label = labels[1]
@@ -461,6 +909,7 @@ async def train_model(req: TrainingRequest):
                 
             auc_val = 0.0
             roc_points = []
+            pos_idx: Optional[int] = None
             if hasattr(model, "predict_proba"):
                 y_prob = model.predict_proba(X_test)
                 if pos_label in model.classes_:
@@ -480,6 +929,35 @@ async def train_model(req: TrainingRequest):
                         roc_points = [{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)]
                     except:
                         pass
+
+            if pos_idx is not None:
+                try:
+                    explain_payload = _build_explainability(
+                        model,
+                        m_type,
+                        X_train,
+                        X_test,
+                        y_test,
+                        y_pred,
+                        df_test_raw,
+                        list(req.features),
+                        cat_cols,
+                        pos_idx,
+                        pos_label,
+                    )
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+                    explain_payload = {}
+
+            try:
+                fairness_payload = _compute_fairness_subgroups(
+                    df_test_raw, y_test, y_pred, pos_label, labels
+                )
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                fairness_payload = {}
         else:
             acc = accuracy_score(y_test, y_pred)
             sens = 0.0
@@ -487,6 +965,9 @@ async def train_model(req: TrainingRequest):
             auc_val = 0.0
             tn = fp = fn = tp = 0
             roc_points = []
+            prec = 0.0
+            f1 = 0.0
+            fairness_payload = {}
             
         return {
             "ok": True,
@@ -502,7 +983,11 @@ async def train_model(req: TrainingRequest):
             "fp": int(fp),
             "fn": int(fn),
             "tp": int(tp),
-            "roc_points": roc_points
+            "roc_points": roc_points,
+            "feature_importance": explain_payload.get("feature_importance", []),
+            "test_explanations": explain_payload.get("test_explanations", []),
+            "positive_class": explain_payload.get("positive_class"),
+            "fairness": fairness_payload,
         }
         
     except Exception as e:
