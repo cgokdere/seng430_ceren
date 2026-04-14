@@ -2,6 +2,7 @@
 let schemaOK = (function () { try { return localStorage.getItem('heathAI_schemaOK') === '1'; } catch (e) { return false; } })();
 window.step3Complete = false;
 let currentStep = 1;
+window.currentStep = 1;
 const steps = [...document.querySelectorAll('.step-btn')];
 const screens = [...document.querySelectorAll('.screen')];
 
@@ -78,6 +79,7 @@ function showGlobalPopup(opts) {
 }
 function showStep(n) {
   currentStep = n;
+  window.currentStep = n;
   steps.forEach(s => {
     const sn = Number(s.dataset.step);
     s.classList.toggle('active', sn === n);
@@ -1022,6 +1024,18 @@ async function doRealTraining(activeModel) {
     tr.dataset.tp = data.tp || 0;
     tr.dataset.rocPoints = JSON.stringify(data.roc_points || []);
 
+    try {
+      const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+      reg[data.model_name_display] = {
+        feature_importance: data.feature_importance || [],
+        test_explanations: data.test_explanations || [],
+        positive_class: data.positive_class || '',
+        fairness: data.fairness || null
+      };
+      sessionStorage.setItem('healthai_explain_registry', JSON.stringify(reg));
+      tr.setAttribute('data-explain-key', data.model_name_display);
+    } catch (e) { }
+
     const sensMatches = data.sensitivity.match(/\d+/);
     const sensVal = sensMatches ? parseInt(sensMatches[0], 10) : 0;
     const sensCls = sensVal >= 70 ? 'good' : sensVal >= 50 ? 'warn' : 'bad';
@@ -1148,6 +1162,641 @@ function toggleCheck(el) {
 }
 window.toggleCheck = toggleCheck;
 
+// ── STEP 6: Clinical display names & labels (charts + waterfall) ────────
+
+function escapeHtmlStep6(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function riskTierFromPercent(pct) {
+  if (pct >= 65) return 'High Risk';
+  if (pct >= 35) return 'Moderate Risk';
+  return 'Low Risk';
+}
+
+function patientLetterFromIndex(idx) {
+  const i = 0 | idx;
+  if (i < 0 || i > 25) return '?';
+  return String.fromCharCode(65 + i);
+}
+
+function parseClinicalNum(rawValue) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+  if (typeof rawValue === 'boolean') return rawValue ? 1 : 0;
+  const s = String(rawValue).replace(/,/g, '').trim();
+  if (s === '' || s === 'N/A') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtClinicalDisplay(val) {
+  if (val === undefined || val === null || val === '') return 'N/A';
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? String(val) : (Math.abs(val) >= 0.01 ? val.toFixed(2) : val.toFixed(4));
+  }
+  return String(val).substring(0, 32);
+}
+
+const clinicalNames = {
+  sys_bp_avg: 'Average Systolic BP',
+  serum_creat_max: 'Peak Serum Creatinine',
+  age_at_admission: 'Patient Age at Admission',
+  bmi_calc: 'Body Mass Index (BMI)',
+  hr_avg_24h: '24h Average Heart Rate',
+  wbc_count_peak: 'Peak White Blood Cell Count',
+  hba1c_level: 'HbA1c Level',
+  prev_admits_1yr: 'Previous Admissions (1 Year)',
+  chol_ldl: 'LDL Cholesterol',
+  resp_rate_avg: 'Average Respiratory Rate',
+  o2_sat_min: 'Minimum O2 Saturation',
+  temp_max: 'Maximum Body Temperature',
+  gcs_score: 'Glasgow Coma Scale',
+  age: 'Patient Age (years)',
+  Age: 'Patient Age (years)',
+  anaemia: 'Anaemia (Present)',
+  creatinine_phosphokinase: 'Creatine Phosphokinase (CPK)',
+  diabetes: 'Diabetes Mellitus (Present)',
+  ejection_fraction: 'Left Ventricular Ejection Fraction',
+  high_blood_pressure: 'Hypertension (Present)',
+  platelets: 'Platelet Count',
+  serum_creatinine: 'Serum Creatinine',
+  serum_sodium: 'Serum Sodium',
+  sex: 'Sex',
+  smoking: 'Smoking Status',
+  time: 'Follow-up Time (days)',
+  DEATH_EVENT: 'Death During Follow-up',
+  Pregnancies: 'Number of Pregnancies',
+  Glucose: 'Fasting Glucose Level',
+  BloodPressure: 'Diastolic Blood Pressure',
+  SkinThickness: 'Triceps Skin Fold Thickness',
+  Insulin: 'Serum Insulin Level',
+  BMI: 'Body Mass Index (BMI)',
+  DiabetesPedigreeFunction: 'Diabetes Pedigree Score',
+  Outcome: 'Diabetes Outcome',
+  id: 'Record ID',
+  gender: 'Sex',
+  hypertension: 'Hypertension (Present)',
+  heart_disease: 'Heart Disease (Present)',
+  ever_married: 'Ever Married',
+  work_type: 'Work Type',
+  Residence_type: 'Residence Type',
+  avg_glucose_level: 'Average Blood Glucose Level',
+  bmi: 'Body Mass Index (BMI)',
+  smoking_status: 'Smoking Status',
+  stroke: 'Stroke (Outcome)',
+  Image_Index: 'Image Index',
+  Finding_Label: 'Radiology Finding Label',
+  Bbox_x: 'Bounding Box X',
+  Bbox_y: 'Bounding Box Y',
+  Bbox_w: 'Bounding Box Width',
+  Bbox_h: 'Bounding Box Height',
+  bp: 'Blood Pressure (mmHg)',
+  sg: 'Urine Specific Gravity',
+  al: 'Urine Albumin',
+  su: 'Urine Sugar',
+  rbc: 'Red Blood Cells (Urine)',
+  pc: 'Pus Cells (Urine)',
+  pcc: 'Pus Cell Clumps',
+  ba: 'Bacteria (Urine)',
+  bgr: 'Blood Glucose (Random)',
+  bu: 'Blood Urea',
+  sc: 'Serum Creatinine',
+  sod: 'Serum Sodium',
+  pot: 'Serum Potassium',
+  hemo: 'Hemoglobin',
+  pcv: 'Packed Cell Volume',
+  wbcc: 'White Blood Cell Count',
+  rbcc: 'Red Blood Cell Count',
+  htn: 'Hypertension (Present)',
+  dm: 'Diabetes Mellitus (Present)',
+  cad: 'Coronary Artery Disease (Present)',
+  appet: 'Appetite',
+  pe: 'Pedal Edema',
+  ane: 'Anaemia (Present)',
+  class: 'CKD Classification',
+  classification: 'CKD Classification',
+  encounter_id: 'Encounter ID',
+  patient_nbr: 'Patient Number',
+  race: 'Race / Ethnicity',
+  weight: 'Weight (lb)',
+  admission_type_id: 'Admission Type',
+  discharge_disposition_id: 'Discharge Disposition',
+  admission_source_id: 'Admission Source',
+  time_in_hospital: 'Length of Stay (days)',
+  payer_code: 'Payer Code',
+  medical_specialty: 'Medical Specialty',
+  num_lab_procedures: 'Number of Lab Procedures',
+  num_procedures: 'Number of Procedures',
+  num_medications: 'Number of Medications',
+  number_outpatient: 'Outpatient Visits (Prior Year)',
+  number_emergency: 'Emergency Visits (Prior Year)',
+  number_inpatient: 'Inpatient Admissions (Prior Year)',
+  diag_1: 'Primary Diagnosis (ICD)',
+  diag_2: 'Secondary Diagnosis (ICD)',
+  diag_3: 'Tertiary Diagnosis (ICD)',
+  number_diagnoses: 'Number of Diagnoses',
+  max_glu_serum: 'Maximum Serum Glucose (Categorical)',
+  A1Cresult: 'HbA1c Result (Categorical)',
+  metformin: 'Metformin Use',
+  repaglinide: 'Repaglinide Use',
+  nateglinide: 'Nateglinide Use',
+  chlorpropamide: 'Chlorpropamide Use',
+  glimepiride: 'Glimepiride Use',
+  acetohexamide: 'Acetohexamide Use',
+  glipizide: 'Glipizide Use',
+  glyburide: 'Glyburide Use',
+  tolbutamide: 'Tolbutamide Use',
+  pioglitazone: 'Pioglitazone Use',
+  rosiglitazone: 'Rosiglitazone Use',
+  acarbose: 'Acarbose Use',
+  miglitol: 'Miglitol Use',
+  troglitazone: 'Troglitazone Use',
+  tolazamide: 'Tolazamide Use',
+  examide: 'Examide Use',
+  citoglipton: 'Citoglipton Use',
+  insulin: 'Insulin Use',
+  'glyburide-metformin': 'Glyburide–Metformin Use',
+  'glipizide-metformin': 'Glipizide–Metformin Use',
+  'glimepiride-pioglitazone': 'Glimepiride–Pioglitazone Use',
+  'metformin-rosiglitazone': 'Metformin–Rosiglitazone Use',
+  'metformin-pioglitazone': 'Metformin–Pioglitazone Use',
+  change: 'Medication Change',
+  diabetesMed: 'Diabetes Medication (Any)',
+  readmitted: '30-Day Readmission',
+  HR: 'Heart Rate',
+  O2Sat: 'Oxygen Saturation',
+  Temp: 'Body Temperature',
+  SBP: 'Systolic Blood Pressure',
+  MAP: 'Mean Arterial Pressure',
+  DBP: 'Diastolic Blood Pressure',
+  Resp: 'Respiratory Rate',
+  EtCO2: 'End-Tidal CO2',
+  BaseExcess: 'Base Excess',
+  HCO3: 'Serum Bicarbonate',
+  FiO2: 'Fraction of Inspired Oxygen',
+  pH: 'Arterial pH',
+  PaCO2: 'Arterial PaCO2',
+  SaO2: 'Arterial Oxygen Saturation',
+  AST: 'Aspartate Aminotransferase',
+  BUN: 'Blood Urea Nitrogen',
+  Alkalinephos: 'Alkaline Phosphatase',
+  Calcium: 'Serum Calcium',
+  Chloride: 'Serum Chloride',
+  Creatinine: 'Serum Creatinine',
+  Bilirubin_direct: 'Direct Bilirubin',
+  Lactate: 'Serum Lactate',
+  Magnesium: 'Serum Magnesium',
+  Phosphate: 'Serum Phosphate',
+  Potassium: 'Serum Potassium',
+  Bilirubin_total: 'Total Bilirubin',
+  TroponinI: 'Troponin I',
+  Hct: 'Hematocrit',
+  Hgb: 'Hemoglobin',
+  PTT: 'Partial Thromboplastin Time',
+  WBC: 'White Blood Cell Count',
+  Fibrinogen: 'Fibrinogen',
+  Platelets: 'Platelet Count',
+  Gender: 'Sex',
+  Unit1: 'ICU Unit Type 1',
+  Unit2: 'ICU Unit Type 2',
+  HospAdmTime: 'Hospital Admission Time',
+  ICULOS: 'ICU Length of Stay',
+  SepsisLabel: 'Sepsis (Outcome)',
+  lesion_id: 'Lesion ID',
+  image_id: 'Image ID',
+  dx: 'Diagnosis Code',
+  dx_type: 'Diagnosis Type',
+  localization: 'Lesion Location',
+  pelvic_incidence: 'Pelvic Incidence Angle',
+  pelvic_tilt: 'Pelvic Tilt Angle',
+  lumbar_lordosis_angle: 'Lumbar Lordosis Angle',
+  sacral_slope: 'Sacral Slope Angle',
+  pelvic_radius: 'Pelvic Radius',
+  degree_spondylolisthesis: 'Degree of Spondylolisthesis',
+  Hemoglobin: 'Hemoglobin',
+  MCH: 'Mean Corpuscular Hemoglobin (MCH)',
+  MCHC: 'Mean Corpuscular Hemoglobin Concentration',
+  MCV: 'Mean Corpuscular Volume (MCV)',
+  Result: 'Anaemia Classification',
+  TB: 'Total Bilirubin',
+  DB: 'Direct Bilirubin',
+  Alkphos: 'Alkaline Phosphatase',
+  Sgpt: 'Alanine Aminotransferase (ALT)',
+  Sgot: 'Aspartate Aminotransferase (AST)',
+  TP: 'Total Protein',
+  ALB: 'Serum Albumin',
+  'A/G_Ratio': 'Albumin/Globulin Ratio',
+  Selector: 'Liver Dataset Group',
+  ID: 'Record ID',
+  Diagnosis: 'Tumor Diagnosis',
+  AGE: 'Patient Age (years)',
+  PackHistory: 'Smoking Pack-Years History',
+  COPDSEVERITY: 'COPD Severity',
+  MWT1: 'Six-Minute Walk Test (Trial 1)',
+  MWT2: 'Six-Minute Walk Test (Trial 2)',
+  MWT1Best: 'Best Six-Minute Walk Distance',
+  FEV1: 'Forced Expiratory Volume (1s)',
+  FEV1PRED: 'Predicted FEV1',
+  FVC: 'Forced Vital Capacity',
+  FVCPRED: 'Predicted FVC',
+  CAT: 'COPD Assessment Test Score',
+  HAD: 'Hospital Anxiety and Depression Score',
+  SGRQ: 'St George Respiratory Questionnaire',
+  AGEquartiles: 'Age Quartile',
+  copd: 'COPD (Present)',
+  muscular: 'Muscular Disorder',
+  AtrialFib: 'Atrial Fibrillation',
+  IHD: 'Ischemic Heart Disease',
+  'baseline value': 'CTG Baseline FHR',
+  accelerations: 'Fetal Heart Rate Accelerations',
+  fetal_movement: 'Fetal Movements',
+  uterine_contractions: 'Uterine Contractions',
+  light_decelerations: 'Light Decelerations',
+  severe_decelerations: 'Severe Decelerations',
+  prolongued_decelerations: 'Prolonged Decelerations',
+  abnormal_short_term_variability: 'Abnormal Short-Term Variability',
+  mean_value_of_short_term_variability: 'Mean Short-Term Variability',
+  percentage_of_time_with_abnormal_long_term_variability: 'Time with Abnormal Long-Term Variability',
+  mean_value_of_long_term_variability: 'Mean Long-Term Variability',
+  histogram_width: 'FHR Histogram Width',
+  histogram_min: 'FHR Histogram Minimum',
+  histogram_max: 'FHR Histogram Maximum',
+  histogram_number_of_peaks: 'FHR Histogram Peaks',
+  histogram_number_of_zeroes: 'FHR Histogram Zeroes',
+  histogram_mode: 'FHR Histogram Mode',
+  histogram_mean: 'FHR Histogram Mean',
+  histogram_median: 'FHR Histogram Median',
+  histogram_variance: 'FHR Histogram Variance',
+  histogram_tendency: 'FHR Histogram Tendency',
+  fetal_health: 'Fetal Health Category',
+  severity_grade: 'Retinopathy Severity Grade',
+  name: 'Subject Identifier',
+  'MDVP:Fo(Hz)': 'Fundamental Vocal Frequency Fo (Hz)',
+  'MDVP:Fhi(Hz)': 'High Vocal Frequency Fhi (Hz)',
+  'MDVP:Flo(Hz)': 'Low Vocal Frequency Flo (Hz)',
+  'MDVP:Jitter(%)': 'Jitter (%)',
+  'MDVP:Jitter(Abs)': 'Absolute Jitter',
+  'MDVP:RAP': 'Relative Average Perturbation (RAP)',
+  'MDVP:PPQ': 'Five-Period Perturbation Quotient (PPQ)',
+  'Jitter:DDP': 'Jitter DDP',
+  'MDVP:Shimmer': 'Shimmer',
+  'MDVP:Shimmer(dB)': 'Shimmer (dB)',
+  'Shimmer:APQ3': 'Shimmer APQ3',
+  'Shimmer:APQ5': 'Shimmer APQ5',
+  'MDVP:APQ': 'Amplitude Perturbation Quotient',
+  'Shimmer:DDA': 'Shimmer DDA',
+  NHR: 'Noise-to-Harmonics Ratio',
+  HNR: 'Harmonics-to-Noise Ratio',
+  status: 'Parkinson Status',
+  RPDE: 'Recurrence Period Density Entropy',
+  DFA: 'Detrended Fluctuation Analysis',
+  spread1: 'Nonlinear Spread Measure 1',
+  spread2: 'Nonlinear Spread Measure 2',
+  D2: 'Correlation Dimension D2',
+  PPE: 'Pitch Period Entropy',
+  Timestamp: 'Survey Timestamp',
+  Country: 'Country',
+  state: 'State / Region',
+  self_employed: 'Self Employed',
+  family_history: 'Family History of Mental Illness',
+  treatment: 'Sought Treatment',
+  work_interfere: 'Work Interference (Mental Health)',
+  no_employees: 'Company Size',
+  remote_work: 'Remote Work',
+  tech_company: 'Tech Company',
+  benefits: 'Mental Health Benefits',
+  care_options: 'Care Options',
+  wellness_program: 'Wellness Program',
+  seek_help: 'Seek Help for Mental Health',
+  anonymity: 'Anonymity at Work',
+  leave: 'Medical Leave Ease',
+  mental_health_consequence: 'Mental Health Disclosure Consequence',
+  phys_health_consequence: 'Physical Health Disclosure Consequence',
+  coworkers: 'Coworker Discussion Comfort',
+  supervisor: 'Supervisor Discussion Comfort',
+  mental_health_interview: 'Mental Health Interview Comfort',
+  phys_health_interview: 'Physical Health Interview Comfort',
+  mental_vs_physical: 'Mental vs Physical Health Emphasis',
+  obs_consequence: 'Observed Consequences',
+  comments: 'Free-text Comments',
+  Sex: 'Sex',
+  Height: 'Height (cm)',
+  Weight: 'Weight (kg)',
+  QRS_duration: 'QRS Duration',
+  PR_interval: 'PR Interval',
+  QT_interval: 'QT Interval',
+  T_interval: 'T Interval',
+  P_interval: 'P Interval',
+  QRS_angle: 'QRS Axis Angle',
+  T_angle: 'T Axis Angle',
+  P_angle: 'P Axis Angle',
+  QRST_angle: 'QRST Axis Angle',
+  J_angle: 'J Angle',
+  Heart_rate: 'Heart Rate',
+  Class: 'Clinical Class (Outcome)',
+  Biopsy: 'Cervical Biopsy Result',
+  'Number of sexual partners': 'Number of Sexual Partners',
+  'First sexual intercourse': 'Age at First Sexual Intercourse',
+  'Num of pregnancies': 'Number of Pregnancies',
+  Smokes: 'Smoking Status',
+  'Smokes (years)': 'Smoking Duration (years)',
+  'Smokes (packs/year)': 'Smoking (packs/year)',
+  'Hormonal Contraceptives': 'Hormonal Contraceptive Use',
+  'Hormonal Contraceptives (years)': 'Hormonal Contraceptive Duration',
+  IUD: 'Intrauterine Device Use',
+  'IUD (years)': 'IUD Duration (years)',
+  STDs: 'History of STDs',
+  'STDs (number)': 'Number of STDs',
+  'STDs:condylomatosis': 'STD: Condylomatosis',
+  'STDs:cervical condylomatosis': 'STD: Cervical Condylomatosis',
+  'STDs:vaginal condylomatosis': 'STD: Vaginal Condylomatosis',
+  'STDs:vulvo-perineal condylomatosis': 'STD: Vulvo-perineal Condylomatosis',
+  'STDs:syphilis': 'STD: Syphilis',
+  'STDs:pelvic inflammatory disease': 'STD: Pelvic Inflammatory Disease',
+  'STDs:genital herpes': 'STD: Genital Herpes',
+  'STDs:molluscum contagiosum': 'STD: Molluscum Contagiosum',
+  'STDs:AIDS': 'STD: AIDS',
+  'STDs:HIV': 'STD: HIV',
+  'STDs:Hepatitis B': 'STD: Hepatitis B',
+  'STDs:HPV': 'STD: HPV',
+  'STDs: Number of diagnosis': 'STD: Number of Diagnoses',
+  'STDs: Time since first diagnosis': 'STD: Time Since First Diagnosis',
+  'STDs: Time since last diagnosis': 'STD: Time Since Last Diagnosis',
+  'Dx:Cancer': 'Diagnosis: Cancer',
+  'Dx:CIN': 'Diagnosis: CIN',
+  'Dx:HPV': 'Diagnosis: HPV',
+  Dx: 'General Diagnosis Flag',
+  Hinselmann: 'Hinselmann Test',
+  Schiller: 'Schiller Test',
+  Citology: 'Cytology Result',
+  Attribute1: 'Thyroid Clinical Parameter 1',
+  Attribute2: 'Thyroid Clinical Parameter 2',
+  Attribute3: 'Thyroid Clinical Parameter 3',
+  Attribute4: 'Thyroid Clinical Parameter 4',
+  Attribute5: 'Thyroid Clinical Parameter 5'
+};
+
+function getClinicalName(rawName) {
+  if (rawName == null || rawName === '') return '';
+  const key = String(rawName);
+  if (clinicalNames[key]) return clinicalNames[key];
+  const w = /^(radius|texture|perimeter|area|smoothness|compactness|concavity|concave_points|symmetry|fractal_dimension)(\d)$/.exec(key);
+  if (w) {
+    const metric = {
+      radius: 'Radius',
+      texture: 'Texture',
+      perimeter: 'Perimeter',
+      area: 'Area',
+      smoothness: 'Smoothness',
+      compactness: 'Compactness',
+      concavity: 'Concavity',
+      concave_points: 'Concave Points',
+      symmetry: 'Symmetry',
+      fractal_dimension: 'Fractal Dimension'
+    }[w[1]];
+    const region = w[2] === '1' ? 'Mean' : (w[2] === '2' ? 'Standard Error' : 'Worst');
+    return region + ' ' + metric + ' (Cell Nuclei)';
+  }
+  const att = /^att(\d+)$/.exec(key);
+  if (att) return 'Retinal Clinical Feature ' + (parseInt(att[1], 10) + 1);
+  const at = /^Attribute(\d+)$/.exec(key);
+  if (at) return 'Thyroid Clinical Parameter ' + at[1];
+  return key;
+}
+
+function clinicalLabel(feature, rawValue) {
+  const fk = String(feature);
+  const display = getClinicalName(feature);
+  const num = parseClinicalNum(rawValue);
+  const dv = fmtClinicalDisplay(rawValue);
+
+  if (num === null && rawValue !== 0 && rawValue !== '0') {
+    return display + ': ' + dv;
+  }
+  const n = num === null ? NaN : num;
+  const L = fk.toLowerCase();
+
+  if (fk === 'Glucose' || fk === 'avg_glucose_level' || fk === 'bgr' || L === 'glucose') {
+    let desc = 'normal';
+    if (n < 70) desc = 'low';
+    else if (n <= 99) desc = 'normal';
+    else if (n <= 125) desc = 'borderline high';
+    else desc = 'very high';
+    return display + ' — ' + desc + ' (' + dv + ' mg/dL)';
+  }
+
+  if (fk === 'BMI' || L === 'bmi' || fk === 'bmi_calc') {
+    let desc = 'normal';
+    if (n < 18.5) desc = 'underweight';
+    else if (n <= 24.9) desc = 'normal';
+    else if (n <= 29.9) desc = 'overweight';
+    else desc = 'elevated–obese';
+    return display + ' — ' + desc + ' (' + dv + ' kg/m²)';
+  }
+
+  if (fk === 'BloodPressure') {
+    let desc = 'normal';
+    if (n < 60) desc = 'low';
+    else if (n <= 80) desc = 'normal';
+    else if (n <= 90) desc = 'elevated';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mmHg)';
+  }
+
+  if (fk === 'Insulin') {
+    let desc = 'normal';
+    if (n === 0) desc = 'not recorded';
+    else if (n <= 25) desc = 'low';
+    else if (n <= 166) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' μU/mL)';
+  }
+
+  if (fk === 'Pregnancies' || L === 'num of pregnancies' || fk === 'Num of pregnancies') {
+    let desc = 'low';
+    if (n === 0) desc = 'none';
+    else if (n <= 4) desc = 'low';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ')';
+  }
+
+  if (fk === 'DiabetesPedigreeFunction') {
+    let desc = 'moderate';
+    if (n < 0.3) desc = 'low';
+    else if (n <= 0.6) desc = 'moderate';
+    else desc = 'high family risk';
+    return display + ' — ' + desc + ' (' + dv + ')';
+  }
+
+  if (fk === 'SkinThickness') {
+    let desc = 'normal';
+    if (n === 0) desc = 'not recorded';
+    else if (n <= 20) desc = 'low';
+    else if (n <= 40) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mm)';
+  }
+
+  if (fk === 'Age' || L === 'age') {
+    return display + ' — Age ' + dv + ' years';
+  }
+
+  if (L === 'ejection_fraction') {
+    let desc = 'preserved or better';
+    if (n < 40) desc = 'markedly reduced';
+    else if (n <= 50) desc = 'mildly reduced';
+    return display + ' — ' + desc + ' (' + dv + '%)';
+  }
+
+  if (L === 'serum_creatinine' || fk === 'Creatinine' || fk === 'sc') {
+    let desc = 'normal';
+    if (n < 1.2) desc = 'normal';
+    else if (n <= 2.0) desc = 'elevated';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mg/dL)';
+  }
+
+  if (fk === 'Chloride' || L === 'chloride') {
+    let desc = 'normal';
+    if (n < 98) desc = 'low';
+    else if (n <= 106) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mEq/L)';
+  }
+
+  if (L === 'serum_sodium' || fk === 'sod' || fk === 'Sodium') {
+    let desc = 'normal';
+    if (n < 135) desc = 'low';
+    else if (n <= 145) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mEq/L)';
+  }
+
+  if (fk === 'Potassium' || fk === 'pot') {
+    let desc = 'normal';
+    if (n < 3.5) desc = 'low';
+    else if (n <= 5.0) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mEq/L)';
+  }
+
+  if (fk === 'bp' && L === 'bp') {
+    let desc = 'normal';
+    if (n < 90) desc = 'low';
+    else if (n <= 120) desc = 'normal';
+    else if (n <= 139) desc = 'elevated';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mmHg systolic estimate)';
+  }
+
+  if (fk === 'Hemoglobin' || fk === 'hemo' || fk === 'Hgb') {
+    let desc = 'normal';
+    if (n < 12) desc = 'low';
+    else if (n <= 16) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' g/dL)';
+  }
+
+  if (fk === 'MCH' || fk === 'MCHC' || fk === 'MCV') {
+    return display + ': ' + dv;
+  }
+
+  if (fk === 'HR' || L === 'heart_rate') {
+    let desc = 'normal';
+    if (n < 60) desc = 'bradycardia';
+    else if (n <= 100) desc = 'normal';
+    else desc = 'tachycardia';
+    return display + ' — ' + desc + ' (' + dv + ' bpm)';
+  }
+
+  if (fk === 'MAP') {
+    let desc = 'typical';
+    if (n < 65) desc = 'low (hypoperfusion risk)';
+    else if (n <= 105) desc = 'typical';
+    else desc = 'elevated';
+    return display + ' — ' + desc + ' (' + dv + ' mmHg)';
+  }
+
+  if (fk === 'SBP' || fk === 'DBP') {
+    let desc = 'normal';
+    if (fk === 'SBP') {
+      if (n < 90) desc = 'low';
+      else if (n < 120) desc = 'normal';
+      else if (n <= 139) desc = 'elevated';
+      else desc = 'high';
+    } else {
+      if (n < 60) desc = 'low';
+      else if (n <= 80) desc = 'normal';
+      else if (n <= 90) desc = 'elevated';
+      else desc = 'high';
+    }
+    return display + ' — ' + desc + ' (' + dv + ' mmHg)';
+  }
+
+  if (fk === 'O2Sat' || fk === 'SaO2') {
+    let desc = 'normal';
+    if (n < 90) desc = 'low';
+    else if (n <= 95) desc = 'borderline';
+    else desc = 'normal';
+    return display + ' — ' + desc + ' (' + dv + '%)';
+  }
+
+  if (fk === 'Lactate') {
+    let desc = 'normal';
+    if (n < 2) desc = 'normal';
+    else if (n <= 4) desc = 'elevated';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' mmol/L)';
+  }
+
+  if (fk === 'WBC' || fk === 'wbcc') {
+    let desc = 'normal';
+    if (n < 4) desc = 'low';
+    else if (n <= 11) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' ×10⁹/L)';
+  }
+
+  if (fk === 'Platelets' || fk === 'platelets') {
+    let desc = 'normal';
+    if (n < 150) desc = 'low';
+    else if (n <= 400) desc = 'normal';
+    else desc = 'high';
+    return display + ' — ' + desc + ' (' + dv + ' ×10⁹/L)';
+  }
+
+  if (fk === 'FEV1') {
+    let desc = 'notable reduction';
+    if (n >= 2.5) desc = 'near expected';
+    else if (n >= 1.5) desc = 'mild-to-moderate';
+    return display + ' — ' + desc + ' (' + dv + ' L)';
+  }
+
+  if (fk === 'FVC') {
+    return display + ' — measured (' + dv + ' L)';
+  }
+
+  if (fk === 'TB' || fk === 'DB') {
+    let desc = fk === 'TB' ? 'total bilirubin' : 'direct bilirubin';
+    return display + ' — ' + desc + ' (' + dv + ' mg/dL)';
+  }
+
+  if (fk === 'hypertension' || fk === 'heart_disease' || fk === 'diabetes' || fk === 'anaemia' || fk === 'smoking' || fk === 'htn' || fk === 'dm' || fk === 'copd') {
+    const on = n === 1 || n > 0;
+    return display + ' — ' + (on ? 'present (1)' : 'absent (0)');
+  }
+
+  if (fk === 'pelvic_incidence' || fk === 'degree_spondylolisthesis') {
+    return display + ' — measured (' + dv + '°)';
+  }
+
+  return display + ': ' + dv;
+}
+
 // ── STEP 6: Patient explanation (update on select) ───────────────────
 var _patientData = {};
 
@@ -1161,123 +1810,98 @@ function updatePatientExplanation() {
   if (!id || !_patientData[id]) return;
 
   var d = _patientData[id];
-  titleEl.textContent = 'Why Was Patient #' + id + ' Flagged as ' + d.level + '? (' + d.risk + '% probability)';
+  var letter = d.letter || '?';
+  var tier = d.tierLabel || 'Risk';
+  titleEl.textContent = 'Why Was Patient ' + letter + ' Flagged as ' + tier + '? (' + d.risk + '% probability)';
 
   barsEl.innerHTML = d.bars.map(function (b) {
-    return '<div class="bar-row"><div class="bar-lbl" style="color:var(--' + (b.cls === 'bad' ? 'bad' : 'good') + '); text-transform:capitalize;">' + b.lbl + '</div>' +
+    return '<div class="bar-row"><div class="bar-lbl" style="color:var(--' + (b.cls === 'bad' ? 'bad' : 'good') + ');">' + escapeHtmlStep6(b.lbl) + '</div>' +
       '<div class="bar-track"><div class="bar-fill ' + b.cls + '" style="width:' + b.w + '%"></div></div>' +
-      '<div class="bar-val" style="color:var(--' + (b.cls === 'bad' ? 'bad' : 'good') + ');">' + b.val + '</div></div>';
+      '<div class="bar-val" style="color:var(--' + (b.cls === 'bad' ? 'bad' : 'good') + ');">' + escapeHtmlStep6(b.val) + '</div></div>';
   }).join('');
 
   var whatIfEl = document.getElementById('patientWhatIfBanner');
-  if (whatIfEl && d.whatIf) {
-    whatIfEl.innerHTML = '<div class="banner-icon">💡</div><div><b>What-if:</b> ' + d.whatIf + '</div>';
-  }
-
-  var warnBannerTxt = document.querySelector('#patientExplainCard .banner.warn div:nth-child(2)');
-  if (warnBannerTxt && d.bars.length > 0) {
-    var topFeatStr = d.bars[0].lbl.replace(/[^a-zA-Z\s]/g, '').trim().toLowerCase() || 'this measurement';
-    warnBannerTxt.innerHTML = '<b>Important:</b> These are associations, not causes. The model says <b>' + topFeatStr + '</b> is important for this prediction — a specialist must decide whether and how to act.';
+  if (whatIfEl && d.topFeatureDisplay) {
+    var topName = d.topFeatureDisplay;
+    whatIfEl.innerHTML = '<div class="banner-icon">💡</div><div><b>What-if:</b> If this patient\'s ' + escapeHtmlStep6(topName) + ' were in the normal range, the model\'s risk estimate could shift substantially. Use this view to explore — not to prescribe.</div>';
   }
 }
 
-function updatePatientExplanationDynamic() {
+function resolveExplainModelKey() {
   try {
-    const dsStr = sessionStorage.getItem('healthai_dataset');
-    if (!dsStr) return;
-    const ds = JSON.parse(dsStr);
-    if (!ds || !ds.columns || !ds.rawRows || ds.rawRows.length < 3) return;
+    const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+    if (window.activeStep5Model && reg[window.activeStep5Model]) return window.activeStep5Model;
+    if (window.currentStep5Rows && window.currentStep5Rows.length) {
+      for (let i = 0; i < window.currentStep5Rows.length; i++) {
+        const tr = window.currentStep5Rows[i];
+        const name = tr.querySelectorAll('td')[0]?.innerText;
+        if (name && reg[name]) return name;
+      }
+    }
+    const ks = Object.keys(reg);
+    return ks.length ? ks[ks.length - 1] : null;
+  } catch (e) {
+    return null;
+  }
+}
 
-    const features = ds.columns.filter(c => c.role !== 'ignore' && c.name !== ds.targetColumn).map(c => c.name);
-    if (features.length < 3) return;
+function updatePatientExplanationFromModel() {
+  try {
+    const modelKey = resolveExplainModelKey();
+    if (!modelKey) return;
+    const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+    const explain = reg[modelKey];
+    if (!explain || !explain.test_explanations || !explain.test_explanations.length) return;
 
     _patientData = {};
     let selHtml = '';
 
-    // Find diverse rows if possible - one positive, two negative, or just first 3
-    let targetCol = ds.targetColumn;
-    let selectedIndices = [];
+    const formatVal = function (v) {
+      if (v === undefined || v === null || v === '') return 'N/A';
+      if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
+      return String(v).substring(0, 24);
+    };
 
-    // Attempt to parse targets
-    let posIdx = ds.rawRows.findIndex(r => {
-      let v = String(r[targetCol]).toLowerCase();
-      return v === '1' || v === 'yes' || v === 'true' || v === 'positive' || v === 'malignant';
-    });
-    let negIdx = ds.rawRows.findIndex(r => {
-      let v = String(r[targetCol]).toLowerCase();
-      return v === '0' || v === 'no' || v === 'false' || v === 'negative' || v === 'benign';
-    });
-
-    if (posIdx !== -1) selectedIndices.push(posIdx);
-    if (negIdx !== -1) selectedIndices.push(negIdx);
-
-    // Fill the rest up to 3
-    for (let i = 0; i < ds.rawRows.length && selectedIndices.length < 3; i++) {
-      if (!selectedIndices.includes(i)) selectedIndices.push(i);
-    }
-
-    const pLvls = ['HIGH RISK', 'LOW RISK', 'MODERATE'];
-
-    for (let i = 0; i < selectedIndices.length; i++) {
-      let rowIndex = selectedIndices[i];
-      let patientRow = ds.rawRows[rowIndex];
-      let pid = String(rowIndex + 1); // Real row index as ID
-
-      // Force 1 High, 1 Low, 1 Moderate for balanced UI preview
-      let isHighRisk = (i === 0);
-      let isModerate = (i === 2);
-
-      let risk;
-      if (isHighRisk) risk = Math.floor(Math.random() * 20) + 75; // 75-94%
-      else if (isModerate) risk = Math.floor(Math.random() * 15) + 40; // 40-54%
-      else risk = Math.floor(Math.random() * 15) + 10; // 10-24%
-
-      let lvl = pLvls[i];
-
-      let f1 = features[0], f2 = features[1], f3 = features[2];
-
-      let formatVal = (v) => {
-        if (v === undefined || v === null) return "N/A";
-        if (typeof v === 'number') return Number.isInteger(v) ? v : v.toFixed(1);
-        return String(v).substring(0, 10);
-      };
-
-      let v1 = formatVal(patientRow[f1]);
-      let v2 = formatVal(patientRow[f2]);
-      let v3 = formatVal(patientRow[f3]);
-
-      let n1 = getClinicalName(f1);
-      let n2 = getClinicalName(f2);
-      let n3 = getClinicalName(f3);
-
-      selHtml += `<option value="${pid}">Patient #${pid} · ${n1} ${v1} · ${lvl} (${risk}%)</option>`;
-
-      let pBars = [];
-
-      pBars.push({
-        lbl: `${isHighRisk || isModerate ? '↑' : '↓'} ${n1} (${v1})`,
-        w: isHighRisk ? 75 : (isModerate ? 45 : 20),
-        val: `${isHighRisk || isModerate ? '+' : '-'}${(0.15 + Math.random() * 0.1).toFixed(2)}`,
-        cls: isHighRisk || isModerate ? 'bad' : 'teal'
+    explain.test_explanations.forEach(function (pex, idx) {
+      const pid = String(pex.patient_index);
+      const risk = Math.round(pex.prob_positive);
+      const tierLabel = riskTierFromPercent(risk);
+      const letter = patientLetterFromIndex(idx);
+      let contribs = (pex.contributions || []).slice();
+      contribs.sort(function (a, b) {
+        return Math.abs(b.impact || 0) - Math.abs(a.impact || 0);
       });
-      pBars.push({
-        lbl: `${isHighRisk ? '↑' : '↓'} ${n2} (${v2})`,
-        w: isHighRisk ? 55 : (isModerate ? 35 : 25),
-        val: `${isHighRisk ? '+' : '-'}${(0.05 + Math.random() * 0.1).toFixed(2)}`,
-        cls: isHighRisk ? 'bad' : 'teal'
+      const topFeat = contribs[0];
+      const topFeatureDisplay = topFeat ? getClinicalName(topFeat.feature) : '';
+      selHtml += '<option value="' + pid + '">Patient ' + letter + ' — ' + tierLabel + ' (' + risk + '%)</option>';
+
+      let maxAbs = 0;
+      contribs.forEach(function (c) {
+        maxAbs = Math.max(maxAbs, Math.abs(c.impact || 0));
       });
-      pBars.push({
-        lbl: `↓ ${n3} (${v3})`,
-        w: isModerate ? 25 : 15,
-        val: `-0.05`,
-        cls: 'teal'
+      if (maxAbs < 1e-12) maxAbs = 1;
+
+      const pBars = contribs.map(function (c) {
+        const imp = c.impact || 0;
+        const w = Math.max(8, Math.min(100, (Math.abs(imp) / maxAbs) * 100));
+        const cls = c.direction === 'increase_risk' ? 'bad' : 'teal';
+        const arrow = imp >= 0 ? '↑' : '↓';
+        return {
+          lbl: arrow + ' ' + clinicalLabel(c.feature, c.value),
+          w: w,
+          val: (imp >= 0 ? '+' : '') + imp.toFixed(3),
+          cls: cls
+        };
       });
 
       _patientData[pid] = {
-        risk: risk, level: lvl, bars: pBars,
-        whatIf: `What if this patient's ${n1.toLowerCase()} were improved? The predicted risk would drop to approximately ${Math.max(10, risk - 17)}%. This kind of thinking helps assess interventions.`
+        risk: risk,
+        tierLabel: tierLabel,
+        letter: letter,
+        bars: pBars,
+        topFeatureDisplay: topFeatureDisplay
       };
-    }
+    });
 
     const caseSel = document.getElementById('caseSelect');
     if (caseSel) {
@@ -1286,16 +1910,14 @@ function updatePatientExplanationDynamic() {
       }
       caseSel.style.display = 'block';
       caseSel.innerHTML = selHtml;
-
       if (typeof initPremiumDropdowns === 'function') {
         initPremiumDropdowns();
       }
-
-      caseSel.value = String(selectedIndices[0] + 1); // default select first option
+      caseSel.value = String(explain.test_explanations[0].patient_index);
       setTimeout(updatePatientExplanation, 10);
     }
   } catch (e) {
-    console.warn('Error dynamically loading patient data', e);
+    console.warn('Error loading model-based patient explanations', e);
   }
 }
 document.getElementById('explainPatientBtn')?.addEventListener('click', updatePatientExplanation);
@@ -2066,26 +2688,6 @@ document.addEventListener('DOMContentLoaded', updateAutoRetrainText);
 setTimeout(updateAutoRetrainText, 100);
 
 // ── STEP 6: FEATURE IMPORTANCE PIPELINE INTEGRATION ───────────────────
-const featureNameMapping = {
-  "sys_bp_avg": "Average Systolic BP",
-  "serum_creat_max": "Peak Serum Creatinine",
-  "age_at_admission": "Patient Age",
-  "bmi_calc": "Body Mass Index (BMI)",
-  "hr_avg_24h": "24h Average Heart Rate",
-  "wbc_count_peak": "Peak White Blood Cell Count",
-  "hba1c_level": "HbA1c Level",
-  "prev_admits_1yr": "Previous Admissions (1 Yr)",
-  "chol_ldl": "LDL Cholesterol",
-  "resp_rate_avg": "Average Respiratory Rate",
-  "o2_sat_min": "Minimum O2 Saturation",
-  "temp_max": "Maximum Body Temperature",
-  "gcs_score": "Glasgow Coma Scale"
-};
-
-function getClinicalName(rawName) {
-  return featureNameMapping[rawName] || rawName;
-}
-
 function renderFeatureImportanceChart(containerId, rawData) {
   const maxVal = Math.max(...rawData.map(d => d.importance));
   const minVal = Math.min(...rawData.map(d => d.importance));
@@ -2113,9 +2715,10 @@ function renderFeatureImportanceChart(containerId, rawData) {
 
     const pct = Math.max(2, item.normalizedImportance * 100).toFixed(1);
 
+    const lbl = escapeHtmlStep6(item.clinicalFeature);
     return `
       <div class="bar-row">
-        <div class="bar-lbl" style="text-transform: capitalize;">${item.clinicalFeature}</div>
+        <div class="bar-lbl">${lbl}</div>
         <div class="bar-track">
           <div class="bar-fill ${colorClass}" style="width:${pct}%"></div>
         </div>
@@ -2129,264 +2732,308 @@ function renderFeatureImportanceChart(containerId, rawData) {
 
 function renderStep6() {
   let step6DataPayload = [];
+  let explain = null;
 
   try {
-    const dsStr = sessionStorage.getItem('healthai_dataset');
-    if (dsStr) {
-      const ds = JSON.parse(dsStr);
-      if (ds && ds.columns) {
-        // Collect actual chosen features
-        const features = ds.columns.filter(c => c.role !== 'ignore' && c.name !== ds.targetColumn).map(c => c.name);
-
-        // Mock importances descending
-        step6DataPayload = features.map((f, i) => {
-          const imp = 0.35 * Math.exp(-0.4 * i) + (Math.random() * 0.05);
-          return { feature: f, importance: imp };
+    const mk = resolveExplainModelKey();
+    if (mk) {
+      const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+      explain = reg[mk] || null;
+      if (explain && explain.feature_importance && explain.feature_importance.length) {
+        step6DataPayload = explain.feature_importance.map(function (x) {
+          return { feature: x.feature, importance: x.importance };
         });
       }
     }
   } catch (e) {
-    console.warn("Could not parse dataset for Step 6 chart", e);
+    console.warn('Could not load explainability for Step 6', e);
   }
 
-  // Fallback defaults
-  if (step6DataPayload.length === 0) {
-    step6DataPayload = [
-      { feature: "sys_bp_avg", importance: 0.124 },
-      { feature: "serum_creat_max", importance: 0.315 },
-      { feature: "age_at_admission", importance: 0.089 },
-      { feature: "bmi_calc", importance: 0.021 },
-      { feature: "hr_avg_24h", importance: 0.145 },
-      { feature: "wbc_count_peak", importance: 0.203 },
-      { feature: "hba1c_level", importance: 0.075 },
-      { feature: "gcs_score", importance: 0.185 },
-      { feature: "resp_rate_avg", importance: 0.056 }
-    ];
-  }
-
-  renderFeatureImportanceChart("step6-container", step6DataPayload);
-
-  // Dynamically update the Clinical Sense Check text based on top features
-  if (step6DataPayload.length >= 2) {
-    const top1 = getClinicalName(step6DataPayload[0].feature).toLowerCase();
-    const top2 = getClinicalName(step6DataPayload[1].feature).toLowerCase();
-
-    // Find the banner text to update
-    const container = document.getElementById('step6-container');
-    if (container && container.nextElementSibling && container.nextElementSibling.classList.contains('banner')) {
-      const textDiv = container.nextElementSibling.querySelector('div:nth-child(2)');
+  const container = document.getElementById('step6-container');
+  if (!step6DataPayload.length) {
+    if (container) {
+      container.innerHTML = '<div class="banner warn" style="margin-top:12px;"><div class="banner-icon">!</div><div>Train a model in Step 4 and add it to the comparison table. In Step 5, select the model with the pills — Step 6 uses that <b>trained model</b> for feature importance and per-patient explanations. If the backend is offline, explanations are unavailable.</div></div>';
+    }
+    const banner = container && container.nextElementSibling;
+    if (banner && banner.classList && banner.classList.contains('banner')) {
+      const textDiv = banner.querySelector('div:nth-child(2)');
       if (textDiv) {
-        textDiv.innerHTML = `<b>Clinical sense check:</b> <span style="text-transform: capitalize;">${top1}</span> and ${top2} are the top predictors. This makes strong clinical sense — these are established risk factors in this dataset.`;
+        textDiv.innerHTML = '<b>Clinical sense check:</b> Train a model and return here to see which measurements mattered most for that model.';
       }
     }
-    // Finally dynamically populate local patient data
-    updatePatientExplanationDynamic();
+    return;
   }
+
+  renderFeatureImportanceChart('step6-container', step6DataPayload);
+
+  const sortedByImp = step6DataPayload.slice().sort(function (a, b) {
+    return (b.importance || 0) - (a.importance || 0);
+  });
+
+  if (sortedByImp.length >= 2) {
+    const top1 = getClinicalName(sortedByImp[0].feature);
+    const top2 = getClinicalName(sortedByImp[1].feature);
+    const wrap = document.getElementById('step6-container');
+    if (wrap && wrap.nextElementSibling && wrap.nextElementSibling.classList.contains('banner')) {
+      const textDiv = wrap.nextElementSibling.querySelector('div:nth-child(2)');
+      if (textDiv) {
+        textDiv.innerHTML = '<b>Clinical sense check:</b> ' + escapeHtmlStep6(top1) + ' and ' + escapeHtmlStep6(top2) + ' rank highest for the <b>selected model</b> (global importance from SHAP / permutation blend). Compare with clinical expectations for this task.';
+      }
+    }
+  }
+
+  updatePatientExplanationFromModel();
+
+  var amberWarn = document.querySelector('#patientExplainCard .banner.warn div:nth-child(2)');
+  if (amberWarn) {
+    amberWarn.innerHTML = '<b>Important:</b> These explanations show associations between measurements and outcomes in the training data — they do not prove causation. A clinician must always decide whether and how to act on any AI prediction.';
+  }
+}
+window.renderStep6 = renderStep6;
+
+window.HEALTHAI_REFERENCE_POPULATION = {
+  sex: { malePct: 48, femalePct: 52 },
+  ageBuckets: { '18-60': 54, '61-75': 30, '76+': 16 }
+};
+
+function _findColMeta(columns, re) {
+  return columns.find(function (c) { return c && c.name && re.test(String(c.name)); });
+}
+
+function _parseAge(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _computeTrainingRep(trainRows, columns) {
+  const ref = window.HEALTHAI_REFERENCE_POPULATION;
+  const out = { gender: null, age: null };
+  if (!trainRows || !trainRows.length || !columns) return out;
+
+  const gCol = _findColMeta(columns, /sex|gender/i);
+  const aCol = _findColMeta(columns, /age/i);
+  const n = trainRows.length;
+
+  if (gCol) {
+    let m = 0; let f = 0;
+    trainRows.forEach(function (r) {
+      const v = String(r[gCol.name] ?? '').trim().toLowerCase();
+      if (v === '0' || v === 'm' || v === 'male' || v === 'man') m++;
+      else if (v === '1' || v === 'f' || v === 'female' || v === 'woman') f++;
+      else if (v) m++;
+    });
+    out.gender = {
+      malePct: Math.round((m / n) * 100),
+      femalePct: Math.round((f / n) * 100),
+      refMale: ref.sex.malePct,
+      refFemale: ref.sex.femalePct
+    };
+  }
+
+  if (aCol) {
+    let b1 = 0; let b2 = 0; let b3 = 0;
+    trainRows.forEach(function (r) {
+      const a = _parseAge(r[aCol.name]);
+      if (a === null) return;
+      if (a >= 18 && a <= 60) b1++;
+      else if (a >= 61 && a <= 75) b2++;
+      else if (a >= 76) b3++;
+    });
+    const denom = Math.max(1, trainRows.filter(function (r) { return _parseAge(r[aCol.name]) !== null; }).length);
+    out.age = {
+      b18_60: Math.round((b1 / denom) * 100),
+      b61_75: Math.round((b2 / denom) * 100),
+      b76: Math.round((b3 / denom) * 100),
+      ref18_60: ref.ageBuckets['18-60'],
+      ref61_75: ref.ageBuckets['61-75'],
+      ref76: ref.ageBuckets['76+']
+    };
+  }
+
+  return out;
+}
+
+function _fairnessTagHtml(sens01) {
+  const pct = Math.round((sens01 || 0) * 100);
+  let sensCls = pct >= 60 ? 'good' : (pct >= 50 ? 'warn' : 'bad');
+  let fairnessTag;
+  if (pct >= 60) {
+    fairnessTag = '<span class="tag good">OK</span>';
+  } else if (pct >= 50) {
+    const tip = 'Sensitivity is moderate for this subgroup (50–59%). Review calibration, thresholds, and data representation for this group before relying on predictions clinically.';
+    fairnessTag = '<span class="tag warn">Review</span><span class="hover-help" role="note" tabindex="0" aria-label="Why review?" data-tooltip="' + tip + '">i</span>';
+  } else {
+    fairnessTag = '<span class="tag bad">⚠ Review Needed</span>';
+  }
+  return { pct: pct, sensCls: sensCls, fairnessTag: fairnessTag, isBad: pct < 50 };
 }
 
 function renderStep7Ethics() {
   try {
+    const modelKey = resolveExplainModelKey();
+    const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+    const pack = modelKey && reg[modelKey] ? reg[modelKey] : null;
+    const fairness = pack && pack.fairness ? pack.fairness : null;
+
     const dsStr = sessionStorage.getItem('healthai_dataset');
-    if (!dsStr) return;
-    const ds = JSON.parse(dsStr);
-    if (!ds || !ds.columns || !ds.rawRows) return;
+    const prepStr = sessionStorage.getItem('healthai_preprocessed');
+    let ds = null;
+    let prep = null;
+    try { if (dsStr) ds = JSON.parse(dsStr); } catch (e) { }
+    try { if (prepStr) prep = JSON.parse(prepStr); } catch (e) { }
 
-    // Find categorical columns to act as subgroups
-    let genderCol = ds.columns.find(c => c.name.toLowerCase().includes('sex') || c.name.toLowerCase().includes('gender'));
-    let ageCol = ds.columns.find(c => c.name.toLowerCase().includes('age'));
-
-    let groupsToRender = [];
-
-    const getMetrics = (isUnderrepresented) => {
-      let acc = isUnderrepresented ? Math.floor(Math.random() * 15 + 65) : Math.floor(Math.random() * 15 + 75);
-      let sens = isUnderrepresented ? Math.floor(Math.random() * 15 + 40) : Math.floor(Math.random() * 20 + 70);
-      let spec = Math.floor(Math.random() * 15 + 75);
-
-      let sensCls = sens >= 60 ? 'good' : (sens >= 50 ? 'warn' : 'bad');
-      let fairnessTag;
-      if (sens >= 60) {
-        fairnessTag = '<span class="tag good">OK</span>';
-      } else if (sens >= 50) {
-        const tip = 'Sensitivity is moderate for this subgroup (50–59%). Review calibration, thresholds, and data representation for this group before relying on predictions clinically.';
-        fairnessTag = `<span class="tag warn">Review</span><span class="hover-help" role="note" tabindex="0" aria-label="Why review?" data-tooltip="${tip}">i</span>`;
-      } else {
-        fairnessTag = '<span class="tag bad">⚠ Review Needed</span>';
-      }
-
-      return { acc: acc, sens: sens, spec: spec, sensCls, fairnessTag, isBad: sens < 50 };
-    };
-
-    if (genderCol) {
-      let colLabel = getClinicalName(genderCol.name);
-      colLabel = colLabel.charAt(0).toUpperCase() + colLabel.slice(1);
-
-      let vals = [...new Set(ds.rawRows.map(r => r[genderCol.name]))].filter(x => x != null && x !== '').slice(0, 2);
-
-      let idealPct = Math.round(100 / Math.max(1, vals.length));
-
-      vals.forEach((v) => {
-        let count = ds.rawRows.filter(r => r[genderCol.name] == v).length;
-        let actualPct = Math.round((count / ds.rawRows.length) * 100);
-        let dispName = String(v);
-        if (dispName === '1') dispName = 'Female';
-        else if (dispName === '0') dispName = 'Male';
-        else if (dispName.toLowerCase() === 'f') dispName = 'Female';
-        else if (dispName.toLowerCase() === 'm') dispName = 'Male';
-
-        let isUnderRep = (idealPct - actualPct > 10);
-        groupsToRender.push({ name: `${colLabel}: ${dispName}`, actualPct, realPct: idealPct, ...getMetrics(isUnderRep) });
-      });
-    }
-
-    if (ageCol) {
-      let colLabel = getClinicalName(ageCol.name);
-      colLabel = colLabel.charAt(0).toUpperCase() + colLabel.slice(1);
-
-      let countYoung = ds.rawRows.filter(r => Number(r[ageCol.name]) < 60).length;
-      let countOld = ds.rawRows.filter(r => Number(r[ageCol.name]) >= 60).length;
-
-      let pctYoung = Math.round((countYoung / ds.rawRows.length) * 100) || 0;
-      let pctOld = Math.round((countOld / ds.rawRows.length) * 100) || 0;
-
-      groupsToRender.push({ name: `${colLabel} < 60`, actualPct: pctYoung, realPct: 50, ...getMetrics(50 - pctYoung > 10) });
-      groupsToRender.push({ name: `${colLabel} 60+`, actualPct: pctOld, realPct: 50, ...getMetrics(50 - pctOld > 10) });
-    }
-
-    if (groupsToRender.length === 0) {
-      groupsToRender.push({ name: 'Group A (Majority)', actualPct: 75, realPct: 50, ...getMetrics(false) });
-      groupsToRender.push({ name: 'Group B (Minority)', actualPct: 25, realPct: 50, ...getMetrics(true) });
-    }
-
-    // Check for >= 10pp difference among all groups to determine overall bias
-    let maxSens = Math.max(...groupsToRender.map(g => g.sens));
-    let hasBias = false;
-    let biasedGroups = [];
-    let overallSens = Math.floor(groupsToRender.reduce((sum, g) => sum + g.sens, 0) / groupsToRender.length);
-
-    groupsToRender.forEach(g => {
-      // Only catch groups that actually received a 'Review' or 'Review Needed' tag (<60%)
-      if (g.sens < 60) {
-        hasBias = true;
-        biasedGroups.push(g);
-      }
-    });
-
-    // Render the table
     const cardTitles = document.querySelectorAll('#step-7 .card-title');
-    let subgroupCard = Array.from(cardTitles).find(el => el.textContent.includes('Subgroup Performance'))?.parentElement;
+    const subgroupCard = Array.from(cardTitles).find(function (el) { return el.textContent.includes('Subgroup Performance'); })?.parentElement;
+
     if (subgroupCard) {
-      let tbody = subgroupCard.querySelector('tbody');
+      const tbody = subgroupCard.querySelector('tbody');
+      const oldBanner = subgroupCard.querySelector('.banner.bad');
+      if (oldBanner) oldBanner.style.display = 'none';
+
+      let bannerContainer = subgroupCard.querySelector('.dynamic-banners');
+      if (!bannerContainer) {
+        bannerContainer = document.createElement('div');
+        bannerContainer.className = 'dynamic-banners';
+        bannerContainer.style.marginTop = '16px';
+        bannerContainer.style.display = 'flex';
+        bannerContainer.style.flexDirection = 'column';
+        bannerContainer.style.gap = '8px';
+        if (oldBanner) oldBanner.after(bannerContainer);
+        else subgroupCard.appendChild(bannerContainer);
+      }
+
       if (tbody) {
-        let html = '';
-        groupsToRender.forEach(g => {
-          html += `<tr>
-                 <td>${g.name}</td>
-                 <td>${g.acc}%</td>
-                 <td class="delta ${g.sensCls}">${g.sens}%</td>
-                 <td>${g.spec}%</td>
-                 <td>${g.fairnessTag}</td>
-               </tr>`;
-        });
-        tbody.innerHTML = html;
-
-        // Remove the static old single banner
-        let oldBanner = subgroupCard.querySelector('.banner.bad');
-        if (oldBanner) oldBanner.style.display = 'none';
-
-        // Check or create container for dynamic banners
-        let bannerContainer = subgroupCard.querySelector('.dynamic-banners');
-        if (!bannerContainer) {
-          bannerContainer = document.createElement('div');
-          bannerContainer.className = 'dynamic-banners';
-          bannerContainer.style.marginTop = '16px';
-          bannerContainer.style.display = 'flex';
-          bannerContainer.style.flexDirection = 'column';
-          bannerContainer.style.gap = '8px';
-          if (oldBanner) oldBanner.after(bannerContainer);
-          else subgroupCard.appendChild(bannerContainer);
-        }
-
-        // Only show banners for "bad" cases. "Review" (warn) uses inline hover tooltip instead.
-        const bannerGroups = biasedGroups.filter(g => g.isBad);
-        if (hasBias && bannerGroups.length > 0) {
-          bannerContainer.innerHTML = bannerGroups.map(g => {
-            let ppDiff = overallSens - g.sens;
-            if (ppDiff <= 10) ppDiff = maxSens - g.sens;
-
-            // Map tag severity to banner styling
-            let isBad = g.sensCls === 'bad'; // < 50
-            let bannerClass = isBad ? 'bad' : 'warn';
-            let icon = isBad ? '🚨' : '⚠️';
-            let title = isBad ? 'Bias Detected' : 'Performance Gap';
-            let actionText = isBad ? 'This model should NOT be deployed until this gap is addressed.' : 'This gap should be investigated to ensure fair clinical outcomes.';
-
-            return `<div class="banner ${bannerClass}">
-                <div class="banner-icon">${icon}</div>
-                <div><b>${title}:</b> Sensitivity for <b>${g.name}</b> (${g.sens}%) is significantly lower than the overall/best segments (up to ${ppDiff} percentage points gap). This means the model misses far more cases in this group. <b>${actionText}</b></div>
-              </div>`;
-          }).join('');
-        } else {
+        if (!fairness || !fairness.subgroups || !fairness.subgroups.length) {
+          tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px;">Train a model in Step 4 (binary classification). Subgroup rows use your <b>test set</b> and need an <b>Age</b> and/or <b>sex/gender</b> column in the CSV. If you already have Age but see this message, click <b>Apply Preparation</b> again in Step 3 so demographics are attached to train/test rows.</td></tr>';
           bannerContainer.innerHTML = '';
+        } else {
+          let html = '';
+          const minN = fairness.min_subgroup_n || 5;
+          const maxSens = Math.max.apply(null, fairness.subgroups.filter(function (g) { return g.n >= minN; }).map(function (g) { return g.sensitivity; }));
+
+          fairness.subgroups.forEach(function (g) {
+            const ft = _fairnessTagHtml(g.sensitivity);
+            const accPct = Math.round((g.accuracy || 0) * 100);
+            const specPct = Math.round((g.specificity || 0) * 100);
+            html += '<tr><td>' + g.label + ' <span style="color:var(--muted);font-size:11px;">(n=' + g.n + ')</span></td>' +
+              '<td>' + accPct + '%</td>' +
+              '<td class="delta ' + ft.sensCls + '">' + ft.pct + '%</td>' +
+              '<td>' + specPct + '%</td>' +
+              '<td>' + ft.fairnessTag + '</td></tr>';
+          });
+          tbody.innerHTML = html;
+
+          if (fairness.bias_warning) {
+            const gap = fairness.sensitivity_max_gap_pp || 0;
+            const flagged = fairness.subgroups.filter(function (g) {
+              return g.n >= minN && (maxSens - g.sensitivity) > 0.1000001;
+            });
+            if (flagged.length) {
+              bannerContainer.innerHTML = flagged.map(function (g) {
+                const ft = _fairnessTagHtml(g.sensitivity);
+                const diff = Math.round((maxSens - g.sensitivity) * 100);
+                const isBad = ft.isBad;
+                const bannerClass = isBad ? 'bad' : 'warn';
+                const icon = isBad ? '🚨' : '⚠️';
+                const title = isBad ? 'Bias Detected' : 'Performance Gap';
+                const actionText = isBad ? 'This model should NOT be deployed until this gap is addressed.' : 'This gap should be investigated to ensure fair clinical outcomes.';
+                return '<div class="banner ' + bannerClass + '"><div class="banner-icon">' + icon + '</div><div><b>' + title + ':</b> Sensitivity for <b>' + g.label + '</b> is <b>' + diff + '</b> percentage points below the best subgroup. Max sensitivity gap across subgroups (n≥' + minN + '): <b>' + gap + '</b> pp (threshold &gt;10 pp). ' + actionText + '</div></div>';
+              }).join('');
+            } else {
+              bannerContainer.innerHTML = '<div class="banner warn"><div class="banner-icon">⚠️</div><div><b>Sensitivity spread:</b> Up to <b>' + gap + '</b> percentage points between subgroups (n≥' + minN + '). Investigate calibration and data balance.</div></div>';
+            }
+          } else {
+            bannerContainer.innerHTML = '';
+          }
         }
       }
     }
 
-    let repCard = Array.from(cardTitles).find(el => el.textContent.includes('Training Data Representation'))?.parentElement;
-    if (repCard) {
-      let theBars = repCard.querySelector('.bars');
-      if (theBars && groupsToRender.length >= 2) {
-        let g1 = groupsToRender[0];
-        let g2 = groupsToRender[1];
+    const repCard = Array.from(cardTitles).find(function (el) { return el.textContent.includes('Training Data Representation'); })?.parentElement;
+    if (repCard && ds && ds.columns && prep && prep.trainRows) {
+      const theBars = repCard.querySelector('.bars');
+      const rep = _computeTrainingRep(prep.trainRows, ds.columns);
+      let foot = repCard.querySelector('.healthai-ref-footnote');
+      if (!foot) {
+        foot = document.createElement('div');
+        foot.className = 'healthai-ref-footnote';
+        foot.style.fontSize = '11px';
+        foot.style.color = 'var(--muted)';
+        foot.style.marginTop = '12px';
+        foot.style.lineHeight = '1.5';
+        const barsEl = repCard.querySelector('.bars');
+        if (barsEl) barsEl.after(foot);
+        else repCard.appendChild(foot);
+      }
+      foot.textContent = 'Reference bars use illustrative defaults (general hospital mix). Replace with your institution\'s registry or census statistics when available.';
 
-        let gap1 = Math.abs(g1.realPct - g1.actualPct);
-        let gap2 = Math.abs(g2.realPct - g2.actualPct);
+      if (theBars) {
+        let inner = '';
+        if (rep.gender) {
+          inner += '<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;">GENDER — TRAINING SET</div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">Male</div><div class="bar-track"><div class="bar-fill" style="width:' + rep.gender.malePct + '%"></div></div><div class="bar-val">' + rep.gender.malePct + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">Female</div><div class="bar-track"><div class="bar-fill" style="width:' + rep.gender.femalePct + '%"></div></div><div class="bar-val">' + rep.gender.femalePct + '%</div></div>';
+          inner += '<div style="font-size:11px;font-weight:600;color:var(--muted);margin:12px 0 8px;">GENDER — REFERENCE (DEFAULT)</div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">Male</div><div class="bar-track"><div class="bar-fill teal" style="width:' + rep.gender.refMale + '%"></div></div><div class="bar-val">' + rep.gender.refMale + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">Female</div><div class="bar-track"><div class="bar-fill teal" style="width:' + rep.gender.refFemale + '%"></div></div><div class="bar-val">' + rep.gender.refFemale + '%</div></div>';
+        }
+        if (rep.age) {
+          inner += '<div style="font-size:11px;font-weight:600;color:var(--muted);margin:16px 0 8px;">AGE — TRAINING SET</div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">18–60</div><div class="bar-track"><div class="bar-fill" style="width:' + rep.age.b18_60 + '%"></div></div><div class="bar-val">' + rep.age.b18_60 + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">61–75</div><div class="bar-track"><div class="bar-fill" style="width:' + rep.age.b61_75 + '%"></div></div><div class="bar-val">' + rep.age.b61_75 + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">76+</div><div class="bar-track"><div class="bar-fill" style="width:' + rep.age.b76 + '%"></div></div><div class="bar-val">' + rep.age.b76 + '%</div></div>';
+          inner += '<div style="font-size:11px;font-weight:600;color:var(--muted);margin:12px 0 8px;">AGE — REFERENCE (DEFAULT)</div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">18–60</div><div class="bar-track"><div class="bar-fill teal" style="width:' + rep.age.ref18_60 + '%"></div></div><div class="bar-val">' + rep.age.ref18_60 + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">61–75</div><div class="bar-track"><div class="bar-fill teal" style="width:' + rep.age.ref61_75 + '%"></div></div><div class="bar-val">' + rep.age.ref61_75 + '%</div></div>';
+          inner += '<div class="bar-row"><div class="bar-lbl">76+</div><div class="bar-track"><div class="bar-fill teal" style="width:' + rep.age.ref76 + '%"></div></div><div class="bar-val">' + rep.age.ref76 + '%</div></div>';
+        }
+        if (!inner) {
+          inner = '<div style="color:var(--muted);padding:8px 0;">Add <b>gender/sex</b> and/or <b>age</b> columns to your dataset to see training vs reference distribution.</div>';
+        }
+        theBars.innerHTML = inner;
 
-        // The worst gap is the one with the biggest divergence
-        let worstG = gap1 > gap2 ? g1 : g2;
-        let worstGapDiff = Math.max(gap1, gap2);
-
-        theBars.innerHTML = `
-            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;">TRAINING DATA</div>
-            <div class="bar-row">
-              <div class="bar-lbl">${g1.name}</div>
-              <div class="bar-track"><div class="bar-fill ${gap1 >= 15 && g1.actualPct < g1.realPct ? 'warn' : ''}" style="width:${g1.actualPct}%"></div></div>
-              <div class="bar-val">${g1.actualPct}%</div>
-            </div>
-            <div class="bar-row">
-              <div class="bar-lbl">${g2.name}</div>
-              <div class="bar-track"><div class="bar-fill ${gap2 >= 15 && g2.actualPct < g2.realPct ? 'warn' : ''}" style="width:${g2.actualPct}%"></div></div>
-              <div class="bar-val">${g2.actualPct}%</div>
-            </div>
-            
-            <div style="font-size:11px;font-weight:600;color:var(--muted);margin:12px 0 8px;">REAL HOSPITAL POPULATION</div>
-            <div class="bar-row">
-              <div class="bar-lbl">${g1.name}</div>
-              <div class="bar-track"><div class="bar-fill teal" style="width:${g1.realPct}%"></div></div>
-              <div class="bar-val">${g1.realPct}%</div>
-            </div>
-            <div class="bar-row">
-              <div class="bar-lbl">${g2.name}</div>
-              <div class="bar-track"><div class="bar-fill teal" style="width:${g2.realPct}%"></div></div>
-              <div class="bar-val">${g2.realPct}%</div>
-            </div>
-           `;
-
-        let banner = repCard.querySelector('.banner.warn');
-        if (banner) {
-          let worstGroupMetrics = groupsToRender.find(g => g.name === worstG.name);
-          // Only show the representation blame banner if the model ACTUALLY failed on this underrepresented group
-          if (worstGapDiff >= 15 && worstG.actualPct < worstG.realPct && worstGroupMetrics && worstGroupMetrics.isBad) {
-            banner.style.display = 'flex';
-            banner.innerHTML = `<div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></div>
-                <div><b>Under-representation:</b> Only ${worstG.actualPct}% of training patients were <b>${worstG.name}</b>, but ${worstG.realPct}% of real patients belong to this group. This gap of ${worstGapDiff} points explains the model's dropped sensitivity. Retrain with balanced data.</div>`;
+        const warnBanner = repCard.querySelector('.banner.warn');
+        if (warnBanner) {
+          let showWarn = false;
+          let warnHtml = '';
+          if (rep.gender) {
+            const dMale = Math.abs(rep.gender.malePct - rep.gender.refMale);
+            const dFemale = Math.abs(rep.gender.femalePct - rep.gender.refFemale);
+            const worst = dMale > dFemale
+              ? { name: 'Male', train: rep.gender.malePct, ref: rep.gender.refMale, gap: dMale }
+              : { name: 'Female', train: rep.gender.femalePct, ref: rep.gender.refFemale, gap: dFemale };
+            if (worst.gap >= 15 && worst.train < worst.ref) {
+              showWarn = true;
+              warnHtml = '<div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></div>' +
+                '<div><b>Possible under-representation (gender):</b> Training data has <b>' + worst.train + '%</b> <b>' + worst.name + '</b> patients vs <b>' + worst.ref + '%</b> in the default reference mix (gap ' + worst.gap + ' pp). This compares datasets only — not model performance. Align training data with your deployment population.</div>';
+            }
+          }
+          if (!showWarn && rep.age) {
+            const gaps = [
+              Math.abs(rep.age.b18_60 - rep.age.ref18_60),
+              Math.abs(rep.age.b61_75 - rep.age.ref61_75),
+              Math.abs(rep.age.b76 - rep.age.ref76)
+            ];
+            const mx = Math.max.apply(null, gaps);
+            if (mx >= 15) {
+              showWarn = true;
+              warnHtml = '<div class="banner-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></div>' +
+                '<div><b>Age mix mismatch:</b> At least one age band differs from the default reference by <b>≥15</b> percentage points. Compare training cohort age structure to your target hospital population.</div>';
+            }
+          }
+          if (showWarn) {
+            warnBanner.style.display = 'flex';
+            warnBanner.innerHTML = warnHtml;
           } else {
-            banner.style.display = 'none';
+            warnBanner.style.display = 'none';
           }
         }
       }
     }
   } catch (e) { console.warn('Ethics Step render err:', e); }
 }
+window.renderStep7Ethics = renderStep7Ethics;
 
 document.addEventListener('DOMContentLoaded', () => {
   // If we are on step 6, init the chart

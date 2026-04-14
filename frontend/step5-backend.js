@@ -1,5 +1,6 @@
 window.activeStep5Model = null;
 window.currentStep5Rows = [];
+window.currentStep = window.currentStep || 1;
 
 function renderStep5Pills() {
   const wrapper = document.getElementById('step5ModelPillsWrapper');
@@ -35,6 +36,12 @@ function renderStep5Pills() {
       renderStep5Pills();
       if (typeof window.renderStep5Metrics === 'function') window.renderStep5Metrics(window.currentStep5Rows, true);
       if (typeof window.renderStep5Charts === 'function') window.renderStep5Charts(window.currentStep5Rows, true);
+      if (typeof window.currentStep === 'number' && window.currentStep === 6 && typeof window.renderStep6 === 'function') {
+        window.renderStep6();
+      }
+      if (typeof window.currentStep === 'number' && window.currentStep === 7 && typeof window.renderStep7Ethics === 'function') {
+        window.renderStep7Ethics();
+      }
     });
   });
 }
