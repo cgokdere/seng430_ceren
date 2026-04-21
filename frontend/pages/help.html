@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Help — HEALTH-AI · ML Learning Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .help-page { max-width: 720px; margin: 0 auto; padding: 32px 24px; }
+    .help-page h1 { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 24px; }
+    .help-page h2 { font-size: 1.1em; color: var(--navy); margin: 24px 0 12px; }
+    .help-page p, .help-page li { font-size: 14px; line-height: 1.65; color: var(--mid); margin-bottom: 10px; }
+    .help-page ul { padding-left: 20px; margin-bottom: 16px; }
+    .help-page .back { display: inline-block; margin-bottom: 20px; color: var(--primary); font-weight: 600; text-decoration: none; }
+    .help-page .back:hover { text-decoration: underline; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+</head>
+<body>
+  <div class="help-page">
+    <a href="step2.html" class="back">← Back to app</a>
+    <h1>HEALTH-AI · ML Learning Tool</h1>
+    <p style="color: var(--primary); font-weight: 600; margin-bottom: 4px;">User Guide for Healthcare Professionals / Students</p>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 24px;">This tool guides you through a 7-step pipeline to define a clinical problem, explore data, prepare it, train models, and evaluate results. It is designed for anyone learning how machine learning can support (not replace) clinical decisions.</p>
+
+    <div class="help-no-tech" style="background: var(--good-bg); border: 1px solid var(--good); border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 28px; display: flex; gap: 14px; align-items: flex-start;">
+      <span style="color: var(--good); font-size: 22px; line-height: 1;" aria-hidden="true">✓</span>
+      <div>
+        <strong style="display: block; margin-bottom: 6px; color: var(--text-primary);">No technical experience needed</strong>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-primary);">This tool runs entirely in your web browser. There is nothing to install, no command line to use, and no coding required. If you can browse the internet, you can use this tool. Open the link provided by your instructor or organisation and start from Step 1.</p>
+      </div>
+    </div>
+
+    <h2>Choosing a domain</h2>
+    <p>You can change the clinical domain in two ways:</p>
+    <ul>
+      <li><strong>Nav dropdown:</strong> Use the domain selector in the top bar (next to Accessibility) to pick one of the 20 clinical domains.</li>
+      <li><strong>Domain pills:</strong> Scroll the horizontal list of domains below the nav and click a pill (e.g. Cardiology, Oncology). Changing the domain resets progress and returns you to Step 1.</li>
+    </ul>
+
+    <h2>The 7 steps</h2>
+    <ul>
+      <li><strong>Step 1 — Clinical Context:</strong> Define the problem and see the clinical question and why it matters for the selected domain.</li>
+      <li><strong>Step 2 — Data Exploration:</strong> Use the default dataset for the domain or upload your own CSV. Use the Column Mapper to assign roles (target, numeric, category, ignore) and validate the schema before continuing.</li>
+      <li><strong>Step 3 — Data Preparation:</strong> Set train/test split, missing-value strategy, normalisation, and class imbalance (e.g. SMOTE). Click “Apply Preparation Settings” so the backend processes the data; the before/after panels will update.</li>
+      <li><strong>Step 4 — Model & Parameters:</strong> Choose an algorithm (KNN, SVM, Decision Tree, Random Forest, Logistic Regression, Naïve Bayes), tune parameters, and train. Compare models in the table.</li>
+      <li><strong>Step 5 — Results:</strong> Review accuracy, sensitivity, specificity, confusion matrix, and ROC curve.</li>
+      <li><strong>Step 6 — Explainability:</strong> See feature importance and per-patient explanations.</li>
+      <li><strong>Step 7 — Ethics & Bias:</strong> Check subgroup performance and EU AI Act–style checklist; download the summary certificate.</li>
+    </ul>
+
+    <h2>Important notes</h2>
+    <ul>
+      <li>Complete the Column Mapper in Step 2 and save the mapping before going to Step 3.</li>
+      <li>This is an educational tool. It does not replace clinical judgment or regulatory approval for use in patient care.</li>
+    </ul>
+
+    <p><a href="step2.html" class="back">← Back to app</a></p>
+  </div>
+</body>
+</html>

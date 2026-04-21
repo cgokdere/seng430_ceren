@@ -1,20 +1,737 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HealthAI</title>
-    <meta http-equiv="refresh" content="0; url=./step1-clinical-context.html" />
-    <link rel="canonical" href="./step1-clinical-context.html" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEALTH-AI | Clinical ML Learning Platform</title>
+
+  <!-- Google Fonts: Fraunces (Headings) and DM Sans (Body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap"
+    rel="stylesheet">
+
+  <style>
+    :root {
+      --navy: #090e14;
+      /* Deep dark navy based on screenshot */
+      --navy-light: #0D1B2A;
+      --olive: #7D8C3A;
+      --olive-hover: #8F9E4A;
+      --text-white: #FFFFFF;
+      --text-grey: #B0C4D4;
+      --glass-bg: rgba(255, 255, 255, 0.03);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --card-bg: rgba(13, 27, 42, 0.5);
+      --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: #0D2340;
+      color: var(--text-white);
+      font-family: 'DM Sans', sans-serif;
+      overflow-x: hidden;
+      line-height: 1.6;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(125, 140, 58, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(26, 107, 154, 0.05) 0%, transparent 40%);
+    }
+
+    h1,
+    h2,
+    h3,
+    .serif {
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+      word-spacing: 0.05em;
+      letter-spacing: -0.02em;
+    }
+
+    /* --- Navigation --- */
+    nav {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 1200px;
+      background: rgba(13, 27, 42, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 100px;
+      padding: 12px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-circle {
+      width: 40px;
+      height: 40px;
+      background: var(--olive);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-family: 'Fraunces', serif;
+      color: var(--navy);
+    }
+
+    .brand-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-title {
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+
+    .brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-grey);
+    }
+
+    .nav-right {
+      font-size: 0.85rem;
+      color: var(--text-grey);
+      font-weight: 500;
+    }
+
+    /* --- Hero Section --- */
+    .hero {
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 100px 5% 0;
+      max-width: 1300px;
+      margin: 0 auto;
+      gap: 60px;
+    }
+
+    .hero-left {
+      flex: 1;
+      max-width: 650px;
+    }
+
+    .pill-badge {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      color: var(--text-grey);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+
+    .pill-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: var(--olive);
+      border-radius: 50%;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
+      line-height: 1.1;
+      margin-bottom: 24px;
+      color: var(--text-white);
+    }
+
+    .hero h1 span {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--text-grey);
+      margin-bottom: 40px;
+      max-width: 500px;
+    }
+
+    .hero-btns {
+      display: flex;
+      gap: 16px;
+    }
+
+    .btn {
+      padding: 14px 32px;
+      border-radius: 100px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: var(--transition);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      background: var(--olive);
+      color: var(--navy);
+      border: none;
+    }
+
+    .btn-primary:hover {
+      background: var(--olive-hover);
+      transform: scale(1.02);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--glass-border);
+      color: var(--text-white);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      transform: scale(1.02);
+    }
+
+    /* --- Hero Right (Workspace Panel) --- */
+    .hero-right {
+      flex: 1;
+      display: flex;
+      justify-content: flex-end;
+      position: relative;
+    }
+
+    .workspace-panel {
+      background: #0d1621;
+      border: 1px solid var(--glass-border);
+      padding: 40px;
+      border-radius: 24px;
+      width: 480px;
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+      animation: float 6s ease-in-out infinite;
+      position: relative;
+    }
+
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-16px);
+      }
+    }
+
+    .workspace-tag {
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      color: var(--olive);
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .workspace-panel h3 {
+      font-size: 2.2rem;
+      line-height: 1.2;
+      margin-bottom: 32px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .mini-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      padding: 24px;
+      border-radius: 16px;
+    }
+
+    .mini-card span {
+      font-size: 0.7rem;
+      color: var(--text-grey);
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .mini-card div {
+      font-size: 1.5rem;
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+    }
+
+    .mini-card p {
+      font-size: 0.8rem;
+      color: var(--text-grey);
+      line-height: 1.4;
+    }
+
+    .steps-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid var(--glass-border);
+      padding-top: 24px;
+    }
+
+    .step-bubble {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(125, 140, 58, 0.1);
+      color: var(--olive);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .steps-text {
+      font-size: 0.85rem;
+      color: var(--text-grey);
+    }
+
+    /* --- Stats Section --- */
+    .stats-section {
+      padding: 100px 5%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .stat-card {
+      background: #0d1621;
+      border: 1px solid var(--glass-border);
+      padding: 32px;
+      border-radius: 16px;
+    }
+
+    .stat-card .num {
+      font-size: 2.5rem;
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      color: var(--text-white);
+      margin-bottom: 8px;
+    }
+
+    .stat-card .label {
+      font-size: 0.9rem;
+      color: var(--text-grey);
+    }
+
+    .pill-tags {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tag-pill {
+      padding: 10px 24px;
+      border-radius: 100px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* --- Section Defaults --- */
+    section {
+      padding: 60px 5%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.85rem;
+      color: var(--text-grey);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 16px;
+      border-radius: 100px;
+      display: inline-block;
+      margin-bottom: 24px;
+    }
+
+    .section-heading {
+      font-size: clamp(2rem, 4vw, 3rem);
+      margin-bottom: 40px;
+      max-width: 700px;
+      line-height: 1.1;
+    }
+
+    /* --- Cards Grids --- */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+
+    .info-card {
+      background: #122B4A;
+      border: 1px solid var(--glass-border);
+      padding: 40px;
+      border-radius: 20px;
+      transition: var(--transition);
+    }
+
+    .info-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--olive);
+    }
+
+    .card-num {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--olive);
+      margin-bottom: 24px;
+      opacity: 0.5;
+      display: block;
+    }
+
+    .card-title {
+      font-family: 'Fraunces', serif;
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+    }
+
+    .card-desc {
+      font-size: 0.95rem;
+      color: var(--text-grey);
+      line-height: 1.6;
+    }
+
+    .info-card,
+    .journey-item,
+    .workspace-panel {
+      background: #122B4A !important;
+    }
+
+    /* --- Expanded Card (Journey/CTA) --- */
+    .large-card {
+      background: #122B4A;
+      border: 1px solid var(--glass-border);
+      padding: 50px;
+      border-radius: 32px;
+      width: 100%;
+    }
+
+    .cta-section .large-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .cta-section .serif {
+      margin-bottom: 16px;
+    }
+
+    .cta-section p {
+      color: var(--text-grey);
+      margin-bottom: 40px;
+      max-width: 500px;
+    }
+
+    .journey-item {
+      display: flex;
+      flex-direction: column;
+      padding: 32px;
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .journey-item span {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--olive);
+      margin-bottom: 12px;
+    }
+
+    /* --- Scroll Animation Classes --- */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 1024px) {
+      .hero {
+        flex-direction: column;
+        height: auto;
+        padding-top: 150px;
+        text-align: center;
+      }
+
+      .hero-right {
+        justify-content: center;
+      }
+
+      .hero p {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .cards-grid,
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-panel {
+        width: 100%;
+        max-width: 500px;
+      }
+
+      .hero h1 {
+        font-size: 3rem;
+      }
+    }
+  </style>
 </head>
-  <body>
-    <noscript>
-      <a href="./step1-clinical-context.html">Open HealthAI</a>
-    </noscript>
-    <script>
-      window.location.replace("./step1-clinical-context.html");
-    </script>
-  </body>
+
+<body>
+
+  <!-- SECTION 1: HERO -->
+  <section class="hero">
+    <div class="hero-left">
+      <div class="pill-badge">Trusted learning flow for clinicians, students, and healthcare teams</div>
+      <h1 id="hero-heading"></h1>
+      <p>Explore machine learning across real healthcare domains with a guided 7-step journey built for clinical
+        context, interpretability, and responsible decision-making.</p>
+      <div class="hero-btns">
+        <a href="./pages/step1.html" class="btn btn-primary">Get Started</a>
+        <a href="#features" class="btn btn-outline">See Highlights</a>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="workspace-panel">
+        <span class="workspace-tag">Clinical Intelligence Workspace</span>
+        <h3>Designed for clarity, not noise.</h3>
+        <div class="mini-grid">
+          <div class="mini-card">
+            <span>Readiness Score</span>
+            <div>94%</div>
+          </div>
+          <div class="mini-card">
+            <span>Focus</span>
+            <div>Explainable AI</div>
+          </div>
+          <div class="mini-card">
+            <span>Safety</span>
+            <div>Ethics & Bias Check</div>
+          </div>
+          <div class="mini-card" style="grid-column: span 2;">
+            <span>PREMIUM MINIMAL INTERFACE</span>
+            <p>Soft motion, dark clinical palette, and distraction-free hierarchy.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 2: STATS BAR -->
+  <section class="stats-section reveal">
+    <div class="stats-grid">
+      <div class="stat-card" style="background: #122B4A;">
+        <div class="num" data-target="20">0+</div>
+        <div class="label">Clinical specialties</div>
+      </div>
+      <div class="stat-card" style="background: #122B4A;">
+        <div class="num" data-target="7">0 steps</div>
+        <div class="label">From context to ethics</div>
+      </div>
+      <div class="stat-card" style="background: #122B4A;">
+        <div class="num">Browser</div>
+        <div class="label">No installation needed</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 3: WHY IT WORKS -->
+  <section id="features">
+    <span class="section-label reveal">Why this experience works</span>
+    <h2 class="section-heading serif reveal">Made for healthcare projects that need elegance and structure.</h2>
+
+    <div class="cards-grid">
+      <div class="info-card reveal">
+        <span class="card-num">01</span>
+        <h3 class="card-title">Clinical-first storytelling</h3>
+        <p class="card-desc">Each step stays grounded in medical reasoning so users understand not just the model, but
+          the care context around it.</p>
+      </div>
+      <div class="info-card reveal">
+        <span class="card-num">02</span>
+        <h3 class="card-title">Refined motion system</h3>
+        <p class="card-desc">Animated gradients, soft reveals, floating panels, and scrolling transitions create polish
+          without breaking the professional tone.</p>
+      </div>
+      <div class="info-card reveal">
+        <span class="card-num">03</span>
+        <h3 class="card-title">Responsible AI framing</h3>
+        <p class="card-desc">Explainability, validation, and bias checks are positioned as part of the main experience,
+          not as an afterthought.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 4: JOURNEY OVERVIEW -->
+  <section>
+    <div class="large-card reveal">
+      <span class="section-label">Journey overview</span>
+      <h2 class="section-heading serif">A polished entry point into the current HealthAI workflow.</h2>
+
+      <div class="cards-grid">
+        <div class="journey-item">
+          <span>Step 1</span>
+          <h3 class="card-title">Clinical context</h3>
+          <p class="card-desc">Understand the care scenario, domain goals, and safety boundaries before data exploration
+            begins.</p>
+        </div>
+        <div class="journey-item">
+          <span>Step 2–4</span>
+          <h3 class="card-title">Data to model</h3>
+          <p class="card-desc">Move through dataset understanding, preparation, and model configuration in a guided
+            sequence.</p>
+        </div>
+        <div class="journey-item">
+          <span>Step 5–7</span>
+          <h3 class="card-title">Results to ethics</h3>
+          <p class="card-desc">Interpret performance, inspect explanations, and finish with fairness and oversight
+            checks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 5: CTA -->
+  <section class="cta-section">
+    <div class="large-card reveal">
+      <span class="section-label">Launch the platform</span>
+      <h2 class="section-heading serif">Open the current HealthAI main experience from here.</h2>
+      <p>The button below takes users directly to the existing application flow without changing that internal
+        experience.</p>
+      <a href="./pages/step1.html" class="btn btn-primary" style="padding: 20px 60px; font-size: 1.2rem;">Get
+        Started</a>
+    </div>
+  </section>
+
+  <footer
+    style="padding: 60px 5%; text-align: center; border-top: 1px solid var(--glass-border); color: var(--text-grey); font-size: 0.9rem;">
+    &copy; 2026 HEALTH-AI Clinical ML Learning Platform. Built for Excellence.
+  </footer>
+
+  <script>
+    // --- Word-by-word Fade In Animation ---
+    const heading = document.getElementById('hero-heading');
+    const text = "Learn Clinical AI Through a Calm, Intelligent, and Professional Experience.";
+    const words = text.split(' ');
+
+    words.forEach((word, index) => {
+      const span = document.createElement('span');
+      span.textContent = word;
+      span.style.display = 'inline-block';
+      span.style.marginRight = '0.25em';
+      span.style.transition = `all 0.6s ease ${index * 0.1}s`;
+      heading.appendChild(span);
+
+      // Trigger animation after a short delay
+      setTimeout(() => {
+        span.style.opacity = '1';
+        span.style.transform = 'translateY(0)';
+      }, 100);
+    });
+
+    // --- Scroll Reveal Logic ---
+    const observerOptions = {
+      threshold: 0.1
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+
+          // Trigger count-up if it's a stat card
+          const nums = entry.target.querySelectorAll('.num[data-target]');
+          nums.forEach(num => {
+            const target = parseInt(num.getAttribute('data-target'));
+            countUp(num, target);
+          });
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // --- Count Up Animation ---
+    function countUp(el, target) {
+      let current = 0;
+      const duration = 2000;
+      const increment = target / (duration / 16);
+
+      function update() {
+        current += increment;
+        if (current < target) {
+          el.textContent = Math.floor(current) + (target === 20 ? '+' : ' steps');
+          requestAnimationFrame(update);
+        } else {
+          el.textContent = target + (target === 20 ? '+' : ' steps');
+        }
+      }
+      update();
+    }
+
+    // --- Smooth Scrolling ---
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        document.querySelector(this.getAttribute('href')).scrollIntoView({
+          behavior: 'smooth'
+        });
+      });
+    });
+  </script>
+</body>
+
 </html>
