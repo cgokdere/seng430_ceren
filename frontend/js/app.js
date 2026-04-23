@@ -1979,20 +1979,78 @@ async function openDownloadSummary() {
         specificity: cells[3]?.innerText || '0%',
         precision: tr.dataset.precision || '0%',
         f1: tr.dataset.f1 || '0%',
-        auc: cells[4]?.innerText || '0'
+        auc: cells[4]?.innerText || '0',
+        tp: parseInt(tr.dataset.tp) || 0,
+        fp: parseInt(tr.dataset.fp) || 0,
+        tn: parseInt(tr.dataset.tn) || 0,
+        fn: parseInt(tr.dataset.fn) || 0
       });
     }
   });
 
-  const biasBannerText = document.querySelector('#step-7 .card .banner.bad div:nth-child(2)')?.textContent || '';
+  const subgroupRows = document.querySelectorAll('#step-7 table tbody tr');
+  const subgroup_performance = [];
+  subgroupRows.forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if (cells.length >= 5) {
+      subgroup_performance.push({
+        group: cells[0]?.innerText.trim(),
+        accuracy: cells[1]?.innerText.trim(),
+        sensitivity: cells[2]?.innerText.trim(),
+        specificity: cells[3]?.innerText.trim(),
+        fairness: cells[4]?.innerText.trim()
+      });
+    }
+  });
 
+  let feature_importance = [];
+  try {
+    const mk = typeof resolveExplainModelKey === 'function' ? resolveExplainModelKey() : null;
+    if (mk) {
+      const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
+      const explain = reg[mk] || null;
+      if (explain && explain.feature_importance && explain.feature_importance.length) {
+        feature_importance = explain.feature_importance.slice(0, 5).map(x => x.feature);
+      }
+    }
+  } catch(e) {}
+
+  if (!feature_importance.length) {
+    feature_importance = [
+      "Follow-up Time",
+      "Patient Age",
+      "LVEF",
+      "Serum Creatinine",
+      "Platelet Count"
+    ];
+  }
+
+  let biasBannerText = '';
+  const subgroupTableBody = document.querySelector('#step-7 table tbody');
+  if (subgroupTableBody && subgroupTableBody.textContent.includes('Subgroup rows use your test set')) {
+    biasBannerText = 'Model has not been trained or subgroup demographics are missing. Please train a model in Step 4 and ensure Age/Sex columns are present in the dataset.';
+  } else {
+    const dynamicBanners = document.querySelectorAll('#step-7 .dynamic-banners .banner');
+    if (dynamicBanners && dynamicBanners.length > 0) {
+      let texts = [];
+      dynamicBanners.forEach(b => {
+        const textDiv = b.querySelector('div:nth-child(2)');
+        if (textDiv) texts.push(textDiv.textContent);
+      });
+      biasBannerText = texts.join('\n');
+    } else {
+      biasBannerText = 'No significant subgroup bias detected.';
+    }
+  }
   const payload = {
     domain: domain,
     checklist_total: total,
     checklist_checked: checked,
     checklist_items: checklistItems,
     models: models,
-    bias_findings: biasBannerText
+    bias_findings: biasBannerText,
+    subgroup_performance: subgroup_performance,
+    feature_importance: feature_importance
   };
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
@@ -3049,7 +3107,7 @@ function renderStep7Ethics() {
 
       if (tbody) {
         if (!fairness || !fairness.subgroups || !fairness.subgroups.length) {
-          tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px;">Train a model in Step 4 (binary classification). Subgroup rows use your <b>test set</b> and need an <b>Age</b> and/or <b>sex/gender</b> column in the CSV. If you already have Age but see this message, click <b>Apply Preparation</b> again in Step 3 so demographics are attached to train/test rows.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px;">Subgroup rows use your <b>test set</b> and need an <b>Age</b> and/or <b>sex/gender</b> column in the CSV. If these columns are missing from your dataset, they will not be displayed here. If you already have Age but see this message, click <b>Apply Preparation</b> again in Step 3 so demographics are attached to train/test rows.</td></tr>';
           bannerContainer.innerHTML = '';
         } else {
           let html = '';

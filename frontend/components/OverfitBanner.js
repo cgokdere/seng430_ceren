@@ -64,7 +64,10 @@ function renderOverfitBanner(results) {
   banner.innerHTML = `
     <div style="font-size: 24px; line-height: 1;">${icon}</div>
     <div style="flex: 1;">
-      <div style="font-weight: 800; font-size: 16px; margin-bottom: 4px; letter-spacing: -0.01em;">${title}</div>
+      <div style="font-weight: 800; font-size: 16px; margin-bottom: 4px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 6px;">
+        ${title}
+        <span title="Overfitting occurs when a model memorizes the training data (like memorizing answers for a test) instead of learning the underlying medical patterns. Such a model will perform perfectly on data it has already seen, but will fail when making predictions for new, unseen patients." style="cursor: help; opacity: 0.7; font-size: 14px;">ⓘ</span>
+      </div>
       <div style="font-size: 13px; line-height: 1.5; opacity: 0.9; margin-bottom: 10px;">${description}</div>
       <div style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(0,0,0,0.05); border-radius: 6px; font-size: 11px; font-weight: 700; font-family: var(--mono, monospace);">
         Cross-validation: ${cvMean} ± ${cvStd}
