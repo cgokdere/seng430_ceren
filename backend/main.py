@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 import os
 import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Ensure project root is in sys.path so 'ml' package can be imported
 # when running from either root or backend/ folder
@@ -15,9 +20,9 @@ if backend_dir not in sys.path:
 
 # Import Routers
 try:
-    from routers import train, results, outliers, preprocessing, certificate
+    from routers import train, results, outliers, preprocessing, certificate, ai_advisor
 except ImportError:
-    from .routers import train, results, outliers, preprocessing, certificate
+    from .routers import train, results, outliers, preprocessing, certificate, ai_advisor
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
@@ -27,6 +32,7 @@ app.include_router(results.router)
 app.include_router(outliers.router)
 app.include_router(preprocessing.router)
 app.include_router(certificate.router)
+app.include_router(ai_advisor.router)
 
 @app.get("/", include_in_schema=False)
 def root():

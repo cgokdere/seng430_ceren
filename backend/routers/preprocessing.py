@@ -89,13 +89,15 @@ async def prepare_data(req: PrepareRequest):
 
         # SMOTE (ML calling)
         applied_smote = False
+        class_balance_before_smote = get_class_balance(pd.DataFrame({target_col: y_train}), target_col)
+        
         if req.settings.smote:
             X_train, y_train, applied_smote = apply_smote(X_train, y_train, cat_cols)
             if req.settings.smote and not applied_smote:
                 warnings.append("SMOTE could not be applied (insufficient samples or error).")
 
         after_stats = {
-            "class_balance_before_smote": get_class_balance(pd.DataFrame({target_col: y_train}), target_col) if applied_smote else None,
+            "class_balance_before_smote": class_balance_before_smote,
             "features": {col: get_stats(X_train, col, 'numeric') for col in num_cols},
             "numeric_aggregate": get_aggregate_numeric_stats(X_train, num_cols),
             "class_balance": get_class_balance(pd.DataFrame({target_col: y_train}), target_col),

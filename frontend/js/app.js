@@ -1039,8 +1039,11 @@ async function doRealTraining(activeModel) {
     tr.dataset.modelId = activeModel;
     // Store accuracy as numeric data attribute so Step 5 can easily find the max
     tr.dataset.accuracy = parseFloat(data.accuracy) || 0;
-    tr.dataset.precision = data.precision || '0%';
-    tr.dataset.f1 = data.f1_score || '0%';
+    tr.dataset.sensitivity = parseFloat(data.sensitivity) || 0;
+    tr.dataset.specificity = parseFloat(data.specificity) || 0;
+    tr.dataset.auc = parseFloat(data.auc) || 0;
+    tr.dataset.precision = parseFloat(data.precision) || 0;
+    tr.dataset.f1 = parseFloat(data.f1_score) || 0;
     tr.dataset.tn = data.tn || 0;
     tr.dataset.fp = data.fp || 0;
     tr.dataset.fn = data.fn || 0;
@@ -3187,3 +3190,103 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(updateChecklistProgress, 50);
   }
 });
+
+// --- AI Model Advisor ---
+document.addEventListener('DOMContentLoaded', () => {
+  const aiBtn = document.getElementById('aiAdvisorBtn');
+  if (!aiBtn) return;
+
+  aiBtn.addEventListener('click', async () => {
+    aiBtn.disabled = true;
+    const originalText = aiBtn.innerHTML;
+    aiBtn.textContent = 'Analyzing...';
+
+    const container = document.getElementById('aiAdvisorContainer');
+    const textElement = document.getElementById('aiAdvisorText');
+
+    container.style.display = 'flex';
+    textElement.innerHTML = '';
+
+    const domain = document.getElementById('domainLabel')?.textContent || 'Cardiology';
+
+    const metrics = [];
+    const tbody = document.getElementById('compareBody');
+    if (tbody) {
+      const rows = tbody.querySelectorAll('tr[data-model-id]');
+      rows.forEach(tr => {
+        metrics.push({
+          model_name: tr.querySelectorAll('td')[0]?.innerText || '',
+          accuracy: parseFloat(tr.dataset.accuracy) || 0,
+          sensitivity: parseFloat(tr.dataset.sensitivity) || 0,
+          specificity: parseFloat(tr.dataset.specificity) || 0,
+          precision: parseFloat(tr.dataset.precision) || 0,
+          f1: parseFloat(tr.dataset.f1) || 0,
+          auc: parseFloat(tr.dataset.auc) || 0,
+          tn: parseInt(tr.dataset.tn) || 0,
+          fp: parseInt(tr.dataset.fp) || 0,
+          fn: parseInt(tr.dataset.fn) || 0,
+          tp: parseInt(tr.dataset.tp) || 0
+        });
+      });
+    }
+
+    textElement.innerHTML = '<i>Connecting to Groq AI Advisor...</i>';
+
+    try {
+      const targetApiBase = (typeof apiBase !== 'undefined') ? apiBase : ((typeof API_BASE !== 'undefined') ? API_BASE : 'http://127.0.0.1:8000');
+      const res = await fetch(targetApiBase + '/api/ai-advisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, metrics })
+      });
+
+      if (!res.ok) {
+        textElement.innerHTML = 'AI analysis unavailable (Server returned HTTP ' + res.status + ')';
+        aiBtn.disabled = false;
+        aiBtn.innerHTML = originalText;
+        return;
+      }
+
+      textElement.innerHTML = '';
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep broken trailing line
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.substring(6);
+            if (dataStr === '[DONE]') continue;
+            try {
+              const dataObj = JSON.parse(dataStr);
+              if (dataObj.error) {
+                textElement.innerHTML += '<br><b style="color:red;">' + dataObj.error + '</b>';
+                break;
+              }
+              if (dataObj.choices && dataObj.choices[0].delta && dataObj.choices[0].delta.content) {
+                const content = dataObj.choices[0].delta.content;
+                // basic markdown handling
+                let parsedHTML = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                textElement.innerHTML += parsedHTML;
+              }
+            } catch (e) { }
+          }
+        }
+      }
+    } catch (e) {
+      textElement.innerHTML = 'AI analysis unavailable (Network error)';
+    }
+
+    aiBtn.disabled = false;
+    aiBtn.innerHTML = originalText;
+  });
+});
+

@@ -1167,6 +1167,16 @@
             </div>
             <div style="font-size:11px;color:var(--muted);margin-top:8px;">★ Sensitivity = how many of the truly
               readmitted patients did the model catch? This is the most important metric in screening.</div>
+
+            <button class="btn" id="aiAdvisorBtn" style="width:100%; margin-top:12px; background:#e0f2fe; color:#0284c7; border: 1px solid #7dd3fc; font-weight:600;">🤖 AI Recommends Best Model</button>
+            <div id="aiAdvisorContainer" class="banner info" style="display:none; margin-top:12px; flex-direction:column; align-items:flex-start;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="banner-icon">🤖</div>
+                <b style="color:var(--info);">AI Clinical Recommendation</b>
+              </div>
+              <div id="aiAdvisorText" style="margin-top:8px; font-size:13px; color:var(--text-primary); line-height:1.5;"></div>
+            </div>
+
           </div>
         </div>
 
