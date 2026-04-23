@@ -262,7 +262,7 @@ def clean_nans(obj: Any) -> Any:
         return None
         
     # Handle strings (including numpy strings)
-    if isinstance(obj, (str, np.str_, np.unicode_)):
+    if isinstance(obj, (str, np.str_)):
         return str(obj)
     
     # Fallback for any other type (unlikely, but safe for JSON)

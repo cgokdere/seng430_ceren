@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install system dependencies for ML libraries (shap, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY ml/requirements.txt ./ml/requirements.txt
+RUN pip install --no-cache-dir -r ml/requirements.txt
+
+# Copy necessary project directories
+COPY ml/ ./ml/
+COPY backend/ ./backend/
+COPY .env ./
+
+# Change to backend directory to run the app
+WORKDIR /app/backend
+
+EXPOSE 8000
+
+# Run the FastAPI app
+CMD ["python3", "main.py"]

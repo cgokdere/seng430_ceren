@@ -19,10 +19,7 @@ if backend_dir not in sys.path:
     sys.path.append(backend_dir)
 
 # Import Routers
-try:
-    from routers import train, results, outliers, preprocessing, certificate, ai_advisor
-except ImportError:
-    from .routers import train, results, outliers, preprocessing, certificate, ai_advisor
+from routers import train, results, outliers, preprocessing, certificate, ai_advisor
 
 app = FastAPI(title="Health-AI Data Preparation API")
 
