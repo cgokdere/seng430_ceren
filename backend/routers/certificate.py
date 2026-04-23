@@ -137,12 +137,12 @@ def generate_certificate(req: CertRequest):
         for m in req.models:
             pdf.set_font("Helvetica", "B", 9)
             y0 = pdf.get_y()
-            pdf.cell(60, 10, _safe(m.name), border=1, fill=True)
+            pdf.cell(55, 10, _safe(m.name), border=1, fill=True)
             pdf.set_font("Helvetica", "", 9)
             cm_text = f"TP: {m.tp} | TN: {m.tn} | FP: {m.fp} | FN: {m.fn}"
-            pdf.cell(45, 10, _safe(cm_text), border=1)
+            pdf.cell(60, 10, _safe(cm_text), border=1)
             x_end = pdf.get_x()
-            w_remain = pdf.w - pdf.l_margin - pdf.r_margin - 105
+            w_remain = pdf.w - pdf.l_margin - pdf.r_margin - 115
             
             pdf.set_text_color(200, 0, 0) if m.fn > 0 else pdf.set_text_color(0, 150, 0)
             

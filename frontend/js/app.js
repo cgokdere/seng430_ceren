@@ -2010,7 +2010,7 @@ async function openDownloadSummary() {
       const reg = JSON.parse(sessionStorage.getItem('healthai_explain_registry') || '{}');
       const explain = reg[mk] || null;
       if (explain && explain.feature_importance && explain.feature_importance.length) {
-        feature_importance = explain.feature_importance.slice(0, 5).map(x => x.feature);
+        feature_importance = explain.feature_importance.slice(0, 5).map(x => typeof getClinicalName === 'function' ? getClinicalName(x.feature) : x.feature);
       }
     }
   } catch(e) {}
